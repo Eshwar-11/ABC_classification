@@ -1,0 +1,10 @@
+services:
+  abc:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./runs:/app/runs
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1

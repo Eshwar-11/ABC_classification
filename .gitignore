@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+.DS_Store
+.vscode/
+.idea/
+*.sqlite
+*.db
+
+# Run artefacts (keep folder, not contents)
+runs/*
+!runs/.gitkeep
+
+# OS
+Thumbs.db
+
+# Build
+*.log
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/

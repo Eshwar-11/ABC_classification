@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{% block title %}Addverb ABC Classifier{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="container">
+  <nav class="topbar">
+    <div class="logo">
+      <div class="logo-mark"><span>A</span><span>B</span><span>C</span></div>
+      <span>Addverb Classifier</span>
+    </div>
+    <div class="divider"></div>
+    <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>New run</a>
+    <a href="/runs" {% if request.url.path.startswith("/runs") %}class="active"{% endif %}>Run history</a>
+    <a href="/docs/logic">Logic & backing</a>
+    <a href="/docs">API</a>
+    <div class="spacer"></div>
+    <span class="code-chip">v{{ version }}</span>
+  </nav>
+  {% block content %}{% endblock %}
+  <div class="statusbar">
+    <span>Addverb ABC Classifier</span>
+    <span class="sep">·</span>
+    <span>Satwik v2.1 scope</span>
+    <span class="sep">·</span>
+    <span>POC build</span>
+    <span style="margin-left:auto">Historical / Forecast / Combined basis supported</span>
+  </div>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

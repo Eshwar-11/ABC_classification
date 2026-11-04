@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% block content %}
+
+<form method="post" action="/classify" enctype="multipart/form-data" id="runForm">
+
+<!-- =============== Step 1: Scope =============== -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">1 · Scope</div>
+      <div class="panel-sub">Which site this run applies to, who is running it.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="grid-2">
+      <div>
+        <label class="field" for="site_name">Site name</label>
+        <input id="site_name" type="text" name="site_name" value="PetMaxi Noida DC-1">
+        <div class="hint">Shown on the Results page and in exports.</div>
+      </div>
+      <div>
+        <label class="field" for="warehouse_code">Warehouse code</label>
+        <input id="warehouse_code" type="text" name="warehouse_code" value="Noida DC-1">
+        <div class="hint">Must match the warehouse tag used in order_lines.</div>
+      </div>
+      <div>
+        <label class="field" for="operator">Operator</label>
+        <input id="operator" type="text" name="operator" placeholder="Eshwar (Consulting / Admin)">
+      </div>
+      <div>
+        <label class="field" for="run_label">Run label (optional)</label>
+        <input id="run_label" type="text" name="run_label" placeholder="POC #1 — walkthrough with Abhishek">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============== Step 2: Upload =============== -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">2 · Upload data assets</div>
+      <div class="panel-sub">Excel (xlsx), CSV or Parquet. Schemas documented in <code class="chip">docs/data_schema.md</code>.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="grid-3">
+
+      <div>
+        <div class="field">Asset 1 · order_lines <span style="color:var(--crit)">*</span></div>
+        <div class="filedrop" id="drop-ol">
+          <div>Drop file or click to select</div>
+          <input type="file" name="order_lines_file" required id="order_lines_file" accept=".xlsx,.csv,.parquet" style="margin-top:8px">
+          <div class="fd-hint">Required columns: sku_code, pick_date, qty_shipped, n_tasks</div>
+          <div class="filename" id="fn-ol"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field">Asset 2 · sku_master <span style="color:var(--crit)">*</span></div>
+        <div class="filedrop" id="drop-sm">
+          <div>Drop file or click to select</div>
+          <input type="file" name="sku_master_file" required id="sku_master_file" accept=".xlsx,.csv,.parquet" style="margin-top:8px">
+          <div class="fd-hint">Required: sku_code, sku_description, status_derived</div>
+          <div class="filename" id="fn-sm"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field">Asset 3 · stock_on_hand (optional)</div>
+        <div class="filedrop" id="drop-so">
+          <div>Drop file or click to select</div>
+          <input type="file" name="stock_on_hand_file" id="stock_on_hand_file" accept=".xlsx,.csv,.parquet" style="margin-top:8px">
+          <div class="fd-hint">Required: sku_code, qty_on_hand. Enables DOI.</div>
+          <div class="filename" id="fn-so"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- =============== Step 3: Basis =============== -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">3 · Basis <span style="color:var(--crit)">*</span></div>
+      <div class="panel-sub">Pick one. No default — this decision changes what the run means.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="grid-3">
+      <label class="chk" data-group="basis">
+        <input type="radio" name="basis" value="historical" checked>
+        <div>
+          <div class="chk-label">Historical</div>
+          <div class="chk-desc">Score on past N days of picks. Conservative, defensible. Requires only order_lines.</div>
+        </div>
+      </label>
+      <label class="chk" data-group="basis">
+        <input type="radio" name="basis" value="forecast">
+        <div>
+          <div class="chk-label">Forecast</div>
+          <div class="chk-desc">Score on next H days of demand plan. Forward-looking. Requires a loaded plan.</div>
+        </div>
+      </label>
+      <label class="chk" data-group="basis">
+        <input type="radio" name="basis" value="combined">
+        <div>
+          <div class="chk-label">Combined</div>
+          <div class="chk-desc">Blend of historical and forecast. Mix m% historical, (1-m)% forecast.</div>
+        </div>
+      </label>
+    </div>
+
+    <div class="grid-3" style="margin-top:12px">
+      <div>
+        <label class="field" for="historical_window_days">Historical window (days)</label>
+        <input id="historical_window_days" type="number" name="historical_window_days" value="90" min="1" max="730">
+        <div class="hint">1 to full history available.</div>
+      </div>
+      <div>
+        <label class="field" for="forecast_horizon_days">Forecast horizon (days)</label>
+        <input id="forecast_horizon_days" type="number" name="forecast_horizon_days" value="30" min="1" max="365">
+        <div class="hint">Used for Forecast or Combined.</div>
+      </div>
+      <div>
+        <label class="field" for="combined_mix_history_pct">Combined mix (historical %)</label>
+        <input id="combined_mix_history_pct" type="number" name="combined_mix_history_pct" value="60" min="0" max="100">
+        <div class="hint">Forecast gets 100 − this value.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============== Step 4: Weights =============== -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">4 · Ranking weights</div>
+      <div class="panel-sub">Blend of frequency (pick tasks per SKU) and volume (units shipped per SKU) by percentile rank.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="grid-2">
+      <div>
+        <label class="field">Frequency weight</label>
+        <input type="range" min="0" max="1" step="0.05" value="0.70" id="wFR" oninput="syncWeights('F')">
+        <input type="number" min="0" max="1" step="0.05" value="0.70" name="frequency_weight" id="wF" oninput="syncWeights('F')">
+      </div>
+      <div>
+        <label class="field">Volume weight</label>
+        <input type="range" min="0" max="1" step="0.05" value="0.30" id="wVR" oninput="syncWeights('V')">
+        <input type="number" min="0" max="1" step="0.05" value="0.30" name="volume_weight" id="wV" oninput="syncWeights('V')">
+      </div>
+    </div>
+    <div class="hint" id="weight-sum" style="margin-top:8px">Sum: 1.00 (auto-normalised during scoring)</div>
+  </div>
+</div>
+
+<!-- =============== Step 5: Cut-offs =============== -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">5 · Cut-offs</div>
+      <div class="panel-sub">% of SKUs by rank over the scorable universe. A + B must sum to less than 100.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="preset-row">
+      {% for key, p in presets.items() %}
+      <button type="button" class="preset {% if key == 'ecom_pets_10_30_60' %}selected{% endif %}"
+              onclick="applyPreset(this, {{ p.a }}, {{ p.b }})">
+        <div class="preset-name">{{ p.label }}</div>
+        <div class="preset-split">A ≤ {{ p.a }}% · B ≤ {{ p.a + p.b }}%</div>
+        <div class="hint" style="margin-top:6px">{{ p.note }}</div>
+      </button>
+      {% endfor %}
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="grid-3">
+      <div>
+        <label class="field" for="a_cutoff_pct">A (top %)</label>
+        <input id="a_cutoff_pct" type="number" name="a_cutoff_pct" value="10" min="0" max="100" step="0.5" oninput="updateCutoffPreview()">
+      </div>
+      <div>
+        <label class="field" for="b_cutoff_pct">B (next %)</label>
+        <input id="b_cutoff_pct" type="number" name="b_cutoff_pct" value="30" min="0" max="100" step="0.5" oninput="updateCutoffPreview()">
+      </div>
+      <div>
+        <label class="field">C (remainder)</label>
+        <input type="number" id="cPreview" value="60" disabled>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============== Step 6: Advanced =============== -->
+<details class="panel" open>
+  <summary class="panel-head" style="cursor:pointer">
+    <div>
+      <div class="panel-title">6 · Advanced thresholds</div>
+      <div class="panel-sub">Defaults match Satwik's v2.1 D-items. Change only if you have a reason.</div>
+    </div>
+  </summary>
+  <div class="panel-body">
+    <div class="grid-3">
+      <div>
+        <label class="field" for="minimum_history_days">Min history to score (days) <span class="code-chip">D6</span></label>
+        <input id="minimum_history_days" type="number" name="minimum_history_days" value="30" min="1" max="365">
+      </div>
+      <div>
+        <label class="field" for="dormant_days_threshold">Dormant after (days quiet)</label>
+        <input id="dormant_days_threshold" type="number" name="dormant_days_threshold" value="180" min="30" max="730">
+      </div>
+      <div>
+        <label class="field" for="prime_slot_capacity">Prime slot capacity (optional)</label>
+        <input id="prime_slot_capacity" type="number" name="prime_slot_capacity" placeholder="site config">
+      </div>
+    </div>
+  </div>
+</details>
+
+<!-- =============== Submit =============== -->
+<div class="panel">
+  <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <div class="hint">Classification runs locally; data stays in this app's <code class="chip">/runs</code> folder.</div>
+    <div style="display:flex;gap:8px">
+      <button type="reset" class="btn ghost">Reset</button>
+      <button type="submit" class="btn primary" id="runBtn">Run classification →</button>
+    </div>
+  </div>
+</div>
+
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  // filename display
+  const map = {ol:'order_lines_file', sm:'sku_master_file', so:'stock_on_hand_file'};
+  for (const k in map) {
+    const input = document.getElementById(map[k]);
+    const drop  = document.getElementById('drop-'+k);
+    const fn    = document.getElementById('fn-'+k);
+    if (!input) continue;
+    input.addEventListener('change', () => {
+      if (input.files && input.files[0]) {
+        fn.textContent = input.files[0].name;
+        drop.classList.add('has-file');
+      } else {
+        fn.textContent = '';
+        drop.classList.remove('has-file');
+      }
+    });
+  }
+
+  // basis tile selected state
+  document.querySelectorAll('.chk[data-group=basis] input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      document.querySelectorAll('.chk[data-group=basis]').forEach(el => el.classList.remove('selected'));
+      if (inp.checked) inp.closest('.chk').classList.add('selected');
+    });
+    if (inp.checked) inp.closest('.chk').classList.add('selected');
+  });
+
+  // reset button also clears file display
+  document.querySelector('button[type=reset]').addEventListener('click', () => {
+    setTimeout(() => {
+      document.querySelectorAll('.filedrop').forEach(d => d.classList.remove('has-file'));
+      document.querySelectorAll('.filename').forEach(f => f.textContent = '');
+    }, 10);
+  });
+
+  // spinner on submit
+  document.getElementById('runForm').addEventListener('submit', () => {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.textContent = 'Running classification…';
+  });
+})();
+
+function syncWeights(src) {
+  const wF = document.getElementById('wF');
+  const wV = document.getElementById('wV');
+  const wFR = document.getElementById('wFR');
+  const wVR = document.getElementById('wVR');
+  if (src === 'F') { wFR.value = wF.value; wV.value = (1 - parseFloat(wF.value)).toFixed(2); wVR.value = wV.value; }
+  else             { wVR.value = wV.value; wF.value = (1 - parseFloat(wV.value)).toFixed(2); wFR.value = wF.value; }
+  document.getElementById('weight-sum').textContent =
+    'Sum: ' + (parseFloat(wF.value) + parseFloat(wV.value)).toFixed(2) + ' (auto-normalised during scoring)';
+}
+
+function applyPreset(el, a, b) {
+  document.querySelectorAll('.preset').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('a_cutoff_pct').value = a;
+  document.getElementById('b_cutoff_pct').value = b;
+  updateCutoffPreview();
+}
+
+function updateCutoffPreview() {
+  const a = parseFloat(document.getElementById('a_cutoff_pct').value) || 0;
+  const b = parseFloat(document.getElementById('b_cutoff_pct').value) || 0;
+  document.getElementById('cPreview').value = Math.max(100 - a - b, 0);
+}
+</script>
+{% endblock %}

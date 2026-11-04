@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Run history</div>
+      <div class="panel-sub">Every classification run, newest first.</div>
+    </div>
+    <a class="btn primary" href="/">New run</a>
+  </div>
+  <div class="panel-body">
+    {% if not runs %}
+      <div class="alert"><span>●</span><div>No runs yet. Upload data on the <a href="/">New run</a> page.</div></div>
+    {% else %}
+    <div class="data-table-wrap">
+      <table class="data">
+        <thead><tr><th>Run ID</th><th>Site</th><th>Basis</th><th>Window</th><th>Universe</th><th>Scorable</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for r in runs %}
+          <tr>
+            <td class="num">{{ r.run_id }}</td>
+            <td>{{ r.site_name or "—" }}</td>
+            <td>{{ r.basis }}</td>
+            <td class="num">{{ r.window_days }}d</td>
+            <td class="num">{{ r.universe_size }}</td>
+            <td class="num">{{ r.scorable_size }}</td>
+            <td class="num">{{ r.created_at[:19] }}</td>
+            <td>
+              <a class="btn ghost" style="padding:3px 8px;font-size:11px" href="/runs/{{ r.run_id }}">Open</a>
+              <a class="btn ghost" style="padding:3px 8px;font-size:11px" href="/runs/{{ r.run_id }}/export.xlsx">Excel</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
