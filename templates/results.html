@@ -177,6 +177,85 @@
   </div>
 </div>
 
+<!-- Ground-truth validation (when existing ABC labels are in the data) -->
+{% if validation %}
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">ABC validation vs existing labels</div>
+      <div class="panel-sub">
+        SKU master carries a maintained ABC label (<code class="chip">velocity_declared</code>).
+        This panel compares our classification against it — no replacement, just agreement.
+      </div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="grid-4">
+      <div class="kpi">
+        <div class="kpi-label">Labeled SKUs</div>
+        <div class="kpi-value">{{ "{:,}".format(validation.total_labeled) }}</div>
+        <div class="kpi-sub">SKUs with an existing A/B/C tag</div>
+      </div>
+      <div class="kpi accent-a">
+        <div class="kpi-label">Agreement · overall</div>
+        <div class="kpi-value">{{ validation.agreement_overall_pct }}%</div>
+        <div class="kpi-sub">across all labeled SKUs</div>
+      </div>
+      <div class="kpi accent-b">
+        <div class="kpi-label">Agreement · scorable only</div>
+        <div class="kpi-value">{{ validation.agreement_scorable_pct }}%</div>
+        <div class="kpi-sub">{{ "{:,}".format(validation.total_labeled_scorable) }} SKUs with activity in window</div>
+      </div>
+      <div class="kpi accent-n">
+        <div class="kpi-label">Labeled but fell to N</div>
+        <div class="kpi-value">{{ validation.fell_to_n.A + validation.fell_to_n.B + validation.fell_to_n.C }}</div>
+        <div class="kpi-sub">{{ validation.fell_to_n.A }} A · {{ validation.fell_to_n.B }} B · {{ validation.fell_to_n.C }} C</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:14px;margin-bottom:6px">Cross-tab</h3>
+    <div class="hint" style="margin-bottom:8px">Rows = existing label, columns = ours. Diagonal cells are exact matches.</div>
+    <div style="display:grid;grid-template-columns:70px repeat(4,1fr);gap:4px;max-width:720px">
+      <div class="matrix-cell hdr">existing \ ours</div>
+      {% for col in ["A","B","C","N"] %}<div class="matrix-cell hdr">{{ col }}</div>{% endfor %}
+      {% for row in ["A","B","C"] %}
+        <div class="matrix-cell hdr">{{ row }}</div>
+        {% for col in ["A","B","C","N"] %}
+          {% set v = validation.crosstab.get(row, {}).get(col, 0) %}
+          <div class="matrix-cell {% if v > 0 and row == col %}strong{% endif %}">
+            <div style="font-size:16px;font-weight:600">{{ v }}</div>
+          </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+
+    {% if validation.disagreement_sample %}
+    <h3 style="margin-top:16px">Disagreement sample · {{ validation.disagreement_sample | length }} rows</h3>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr><th>SKU</th><th>Description</th><th>Existing</th><th>Ours</th><th>Rank</th><th>Tasks</th><th>Units</th></tr>
+        </thead>
+        <tbody>
+          {% for d in validation.disagreement_sample %}
+          <tr>
+            <td class="num">{{ d.sku_code }}</td>
+            <td>{{ d.sku_description or "—" }}</td>
+            <td><span class="cls cls-{{ d.velocity_declared }}">{{ d.velocity_declared }}</span></td>
+            <td><span class="cls cls-{{ d.class_abc }}">{{ d.class_abc }}</span></td>
+            <td class="num">#{{ d.rank_overall | int if d.rank_overall else "—" }}</td>
+            <td class="num">{{ "{:,}".format(d.freq_tasks | int) if d.freq_tasks else "—" }}</td>
+            <td class="num">{{ "{:,.0f}".format(d.vol_qty or 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Top A -->
 {% if top_a %}
 <div class="panel">

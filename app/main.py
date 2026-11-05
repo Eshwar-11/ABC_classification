@@ -34,6 +34,7 @@ from .config import RunConfig, PRESETS
 from .derivatives import suggest_parents
 from .loaders import load_order_lines, load_sku_master, load_stock_on_hand, load_forecast
 from .storage import new_run_id, save_run, load_run, export_xlsx_path
+from .validation import compute_validation
 from .validators import run_quality_checks, is_blocking
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -90,6 +91,9 @@ def run_detail(request: Request, run_id: str):
     links_df = db.get_derivative_links(run_id)
     confirmed = links_df.to_dict(orient="records") if len(links_df) else []
 
+    # Ground-truth validation (when velocity_declared is present in the data)
+    validation = compute_validation(sku_level)
+
     return templates.TemplateResponse(
         request=request,
         name="results.html",
@@ -99,6 +103,7 @@ def run_detail(request: Request, run_id: str):
             "n_sample": n_sample,
             "suggestions": suggestions,
             "confirmed_links": confirmed,
+            "validation": validation,
             "version": __version__,
         },
     )

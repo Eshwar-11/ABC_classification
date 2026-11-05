@@ -42,13 +42,14 @@ def run_quality_checks(
         f"{len(uncovered)} SKU(s) in picks but missing from master.",
     ))
 
-    # 2. Duplicate SKUs in master
-    dupe_count = int(sku_master["sku_code"].duplicated().sum())
+    # 2. Duplicate SKUs in master (auto-deduped on load; this just reports)
+    original_dupes = int(sku_master.attrs.get("_dedupe_count", 0))
     checks.append(Check(
-        "no_duplicate_sku_in_master",
-        "block",
-        dupe_count == QUALITY_GATES["max_duplicate_sku_in_master"],
-        f"{dupe_count} duplicate sku_code row(s) in master.",
+        "duplicate_sku_in_master",
+        "warn",
+        original_dupes == 0,
+        (f"{original_dupes} duplicate sku_code row(s) found in master; deduplicated (first row kept)."
+         if original_dupes else "No duplicate sku_code rows."),
     ))
 
     # 3. Negative qty rows in order lines
