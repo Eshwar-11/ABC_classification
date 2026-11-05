@@ -17,6 +17,8 @@ docker compose up --build
 
 ### Without Docker
 
+**Requires Python 3.11, 3.12 or 3.13.** Python 3.14+ will fail because pandas / numpy / pyarrow do not yet ship wheels for those versions; pip will try to build from C source and need Visual Studio build tools on Windows. If you have multiple Pythons installed, use `py -3.12` on Windows or `python3.12` on macOS/Linux.
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate

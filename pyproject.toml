@@ -1,0 +1,25 @@
+[project]
+name = "addverb-abc-classifier"
+version = "0.1.0"
+description = "WMS SKU classification module. Satwik v2.1 scope."
+requires-python = ">=3.11,<3.14"
+authors = [{ name = "Eshwar", email = "b.eshwar13@gmail.com" }]
+license = { text = "Proprietary" }
+
+# NOTE on Python version:
+# pandas / numpy / pyarrow do not ship pre-built wheels for Python 3.14+ at the
+# pinned versions in requirements.txt. Trying to install on 3.14 or 3.15 will
+# fall back to building from C source and fail on Windows unless Visual Studio
+# C++ build tools are present. Stick to 3.11, 3.12 or 3.13. Docker users are
+# unaffected since the Dockerfile pins python:3.12-slim.
+
+[project.scripts]
+abc-classify-serve = "app.main:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
