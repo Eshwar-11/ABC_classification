@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="page-title">What changes — compare two runs</h2>
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Pick a baseline and a comparison</div>
+      <div class="panel-sub">Click one run as baseline (A), one as comparison (B). Then open the dashboard.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    {% if runs|length < 2 %}
+    <div class="alert info"><span class="ico">i</span><div>Need at least 2 runs. <a href="/">Create another run</a> first.</div></div>
+    {% else %}
+    <div id="run-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+      {% for r in runs %}
+      <div class="run-picker-card" data-run="{{ r.run_id }}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong class="chip">{{ r.run_id }}</strong>
+          <span class="status-pill {{ r.status }}">{{ r.status }}</span>
+        </div>
+        <div style="margin-top:8px;font-size:13px;font-weight:500">{{ r.client_name or "—" }}</div>
+        <div class="hint">{{ r.warehouse_code or "—" }} · {{ r.basis }}</div>
+        <div class="hint" style="margin-top:6px">
+          {{ r.universe_size }} SKUs · {{ r.scorable_size }} scorable · {{ r.created_at[:16] }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="panel" style="margin-top:14px;background:var(--surface-2)">
+      <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>
+          <span class="hint">Baseline (A):</span> <code id="pickA" class="chip">—</code>
+          &nbsp;&nbsp; <span class="hint">Comparison (B):</span> <code id="pickB" class="chip">—</code>
+        </div>
+        <button class="btn primary" id="openBtn" disabled onclick="openCompare()">Open dashboard →</button>
+      </div>
+    </div>
+
+    <div class="alert info" style="margin-top:14px">
+      <span class="ico">i</span>
+      <div>A is the older baseline (what was); B is the newer comparison (what is). The dashboard shows class movements and catalog turnover from A to B.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pickedA = null, pickedB = null;
+document.querySelectorAll('[data-run]').forEach(card => {
+  card.addEventListener('click', () => {
+    const r = card.dataset.run;
+    if (pickedA === r) { pickedA = null; }
+    else if (pickedB === r) { pickedB = null; }
+    else if (!pickedA) { pickedA = r; }
+    else if (!pickedB) { pickedB = r; }
+    else { pickedA = pickedB; pickedB = r; }
+    render();
+  });
+});
+function render() {
+  document.querySelectorAll('[data-run]').forEach(c => {
+    c.classList.remove('selected-a', 'selected-b');
+    if (c.dataset.run === pickedA) c.classList.add('selected-a');
+    if (c.dataset.run === pickedB) c.classList.add('selected-b');
+  });
+  document.getElementById('pickA').textContent = pickedA || '—';
+  document.getElementById('pickB').textContent = pickedB || '—';
+  document.getElementById('openBtn').disabled = !(pickedA && pickedB);
+}
+function openCompare() {
+  if (pickedA && pickedB) location.href = `/dashboard/${pickedA}/${pickedB}`;
+}
+</script>
+{% endblock %}

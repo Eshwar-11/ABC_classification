@@ -1,94 +1,65 @@
-"""Run storage. Simple file-based store; swap for a DB in production.
+"""Backward-compatibility shim.
 
-Uses pickle for the SKU-level cache (fast, preserves dtypes, no extra
-dependencies) and xlsx for the user-facing export. Parquet was dropped
-because pyarrow lacks 3.15 wheels at the moment and the dep isn't worth it.
+Earlier builds persisted each run as flat files under runs/<run_id>/. New builds
+persist to a SQLite DB (app/db.py). This shim keeps the save_run/load_run API
+stable for any older code that still imports it, and routes through app.db.
 """
 from __future__ import annotations
 import json
 import pickle
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+
+from . import db
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
 RUNS_DIR.mkdir(exist_ok=True)
 
 
 def new_run_id() -> str:
-    return "R-" + datetime.utcnow().strftime("%Y-%m-%d-%H%M%S") + "-" + uuid.uuid4().hex[:4].upper()
+    import uuid
+    return "R-" + datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S") + "-" + uuid.uuid4().hex[:4].upper()
 
 
-def save_run(run_id: str, result, quality_checks: list) -> Path:
-    """Persist the full run result for later retrieval + export."""
+def save_run(run_id: str, result, quality_checks: list, client_name: str = "") -> Path:
+    """Persist to SQLite + also drop an xlsx export file for convenience."""
+    db.save_run(run_id, result, quality_checks, client_name=client_name)
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(exist_ok=True)
-
-    # Metadata JSON
-    meta = {
-        "run_id": run_id,
-        "created_at": datetime.utcnow().isoformat(),
-        "config": result.config,
-        "summary": result.summary,
-        "pareto_scan": result.pareto_scan,
-        "universe_size": result.universe_size,
-        "scorable_size": result.scorable_size,
-        "a_cutoff_rank": result.a_cutoff_rank,
-        "b_cutoff_rank": result.b_cutoff_rank,
-        "window_start": result.window_start.isoformat() if result.window_start else None,
-        "window_end": result.window_end.isoformat() if result.window_end else None,
-        "quality_checks": [
-            {"name": c.name, "severity": c.severity, "passed": c.passed, "detail": c.detail}
-            for c in quality_checks
-        ],
-    }
-    (run_dir / "meta.json").write_text(json.dumps(meta, indent=2, default=str))
-
-    # SKU-level results
-    # Pickle for fast app-side reloads (preserves dtypes), xlsx for user export.
-    with open(run_dir / "sku_level.pkl", "wb") as f:
-        pickle.dump(result.sku_level, f, protocol=pickle.HIGHEST_PROTOCOL)
     result.sku_level.to_excel(run_dir / "sku_level.xlsx", index=False)
-
     return run_dir
 
 
 def load_run(run_id: str) -> tuple[dict, pd.DataFrame]:
+    """Try SQLite first; fall back to legacy pickle / parquet / xlsx files."""
+    try:
+        meta = db.get_run_meta(run_id)
+        sku_level = db.get_run_skus(run_id)
+        if len(sku_level):
+            return meta, sku_level
+    except KeyError:
+        pass
+
     run_dir = RUNS_DIR / run_id
     if not run_dir.exists():
         raise FileNotFoundError(f"Run {run_id} not found")
     meta = json.loads((run_dir / "meta.json").read_text())
-    # Prefer pickle (new format); fall back to parquet for older runs if present.
     pkl = run_dir / "sku_level.pkl"
     pq = run_dir / "sku_level.parquet"
     if pkl.exists():
         with open(pkl, "rb") as f:
             sku_level = pickle.load(f)
     elif pq.exists():
-        sku_level = pd.read_parquet(pq)   # requires pyarrow
+        sku_level = pd.read_parquet(pq)
     else:
-        # Fall back to xlsx if neither cache exists.
         sku_level = pd.read_excel(run_dir / "sku_level.xlsx")
     return meta, sku_level
 
 
 def list_runs() -> list[dict]:
-    out = []
-    for d in sorted(RUNS_DIR.iterdir(), reverse=True):
-        if d.is_dir() and (d / "meta.json").exists():
-            meta = json.loads((d / "meta.json").read_text())
-            out.append({
-                "run_id": meta["run_id"],
-                "created_at": meta["created_at"],
-                "site_name": meta["config"].get("site_name"),
-                "basis": meta["config"].get("basis"),
-                "window_days": meta["config"].get("historical_window_days"),
-                "universe_size": meta["universe_size"],
-                "scorable_size": meta["scorable_size"],
-            })
-    return out
+    return db.list_runs()
 
 
 def export_xlsx_path(run_id: str) -> Path:

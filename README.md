@@ -1,8 +1,8 @@
 # Addverb ABC Classifier
 
-WMS SKU classification module. Scores every SKU on frequency + volume over a configurable window, ranks them, and assigns ABC classes by rank-% cut-offs. Satwik v2.1 scope.
+WMS SKU classification module. Scores every SKU on frequency + volume over a configurable window, ranks them, and assigns ABC classes by rank-% cut-offs. Draft → Applied workflow with a run-vs-run change dashboard.
 
-Built as a FastAPI app with HTML/JS frontend. Upload the three data extracts, pick the basis (Historical / Forecast / Combined) and parameters, run. Results include a Pareto curve, class summary, SKU-level table, and Excel/JSON export.
+Built as a FastAPI app with HTML/JS frontend. Upload the data extracts, pick basis (Historical / Forecast / Combined) and parameters, run. Results include a Pareto curve, class summary, SKU-level table, derivative-SKU suggestions, and Excel/JSON export. All runs persist in a local SQLite DB and are revisitable from Run history or the Changes dashboard.
 
 ---
 
@@ -12,62 +12,70 @@ Built as a FastAPI app with HTML/JS frontend. Upload the three data extracts, pi
 
 ```bash
 docker compose up --build
-# then open http://localhost:8000
+# open http://localhost:8000
 ```
 
 ### Without Docker
 
-**Works on Python 3.11 through 3.15.** Pins in `requirements.txt` are loose ranges so pip picks a wheel for your version:
+**Works on Python 3.11 through 3.15.** Pins in `requirements.txt` are loose so pip picks a wheel for your version:
 
 - 3.11 / 3.12 / 3.13: any pandas 2.2 through 3.1 works
 - 3.14: pandas 2.3.x (2.2.3 has no 3.14 wheels)
-- 3.15: pandas >= 3.0, numpy >= 2.5 (earlier versions have no 3.15 wheels, which is what the "pandas failed to build from source" error means on a fresh 3.15 install with old pins)
+- 3.15: pandas >= 3.0, numpy >= 2.5 (earlier versions have no 3.15 wheels, which is what the "pandas failed to build from source" error means)
 
-If Windows `python` resolves to a Microsoft Store stub (the "install from the Store" error), use `py` instead — the Python launcher. pyarrow is optional on 3.15 and only needed for `.parquet` uploads; `.xlsx` and `.csv` work without it.
+If Windows `python` resolves to a Microsoft Store stub, use `py` instead — the Python launcher. pyarrow is optional on 3.15 and only needed for `.parquet` uploads; `.xlsx` and `.csv` work without it.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 127.0.0.1 --port 8000
-# then open http://localhost:8000
+# open http://localhost:8000
 ```
 
-For hot-reload during development, also install `watchfiles` and add `--reload` to the uvicorn command. `watchfiles` is separated out because it needs a Rust toolchain to build when pip can't find a wheel for your Python.
+For hot-reload during development, also `pip install watchfiles` and add `--reload` to the uvicorn command.
 
 ---
 
 ## What it does
 
-1. **Upload three files** (xlsx, csv, or parquet):
-   - `order_lines` — aggregated picks, SKU × order × day
-   - `sku_master` — SKU universe with status flags
-   - `stock_on_hand` — optional, enables DOI
-2. **Pick basis** — Historical / Forecast / Combined. No silent default.
-3. **Pick parameters** — frequency vs volume weight, window length, cut-offs (A %, B %).
-4. **Run classification** — the engine aggregates, ranks by percentile, cuts into A/B/C/N.
-5. **Review results** — class KPIs, Pareto curve, top-A SKUs, N-class sample, quality checks.
-6. **Export** — Excel or JSON for downstream consumers (slotting, WES, decks).
+1. **Upload data** (xlsx, csv, or parquet): order_lines, sku_master, optional stock_on_hand, optional forecast
+2. **Configure**: client/warehouse, basis, window, weights, cut-offs, add-ons
+3. **Run classification** — engine aggregates, ranks by percentile, cuts into A/B/C/N
+4. **Review** — class KPIs, Pareto, top-A SKUs, N-class sample, derivative suggestions
+5. **Confirm derivatives** — accept, re-pick, or leave blank for each no-history SKU
+6. **Approve** — Draft → Applied; slotting consumes only Applied runs
+7. **Compare** — pick any two past runs; the dashboard shows class movements, catalog turnover, config diff, Pareto comparison
+8. **Export** — Excel per run; JSON API for integrations
+
+---
+
+## Add-on modules (opt-in per run)
+
+- **Derivative suggestions** (default on) — fuzzy-match no-history SKUs to parent SKUs; user confirms
+- **XYZ overlay** — demand variability for safety-stock sizing
+- **Exception rules** — seasonal, promotional, co-pick overlays
+
+Core classifier runs without any of them.
 
 ---
 
 ## Logic and backing
 
-The scoring rules, defaults and their rationale live in [`docs/classification_logic.md`](docs/classification_logic.md). Hit `/docs/logic` in the running app for the same content rendered.
+Full scoring rules, defaults, and rationale in [`docs/classification_logic.md`](docs/classification_logic.md). Rendered at `/docs/logic` in the running app.
 
 Key invariants:
-
-- **Score is never shown** — rank positions only (Satwik R13).
-- **Cut-offs are % of SKUs by rank**, not cumulative value.
-- **Percentile rank** normalisation (D1 default), robust to lumpy portfolios.
-- **Dormant SKUs** get classified and carry a flag; `no-history` SKUs go to class N.
-- **Manual picks included** — frequency is at pick-task grain, not order grain.
+- Score is never shown — rank positions only
+- Cut-offs are % of SKUs by rank, not cumulative value
+- Percentile-rank normalisation (robust to lumpy portfolios)
+- Dormant SKUs classified normally + flagged; `no-history` SKUs → class N
+- Manual picks included (frequency at pick-task grain, not order grain)
 
 ---
 
 ## Data schema
 
-Expected columns in [`docs/data_schema.md`](docs/data_schema.md). Source SQL for PetMaxi WMS is in [`sample_data/sql/`](sample_data/sql/). Supports xlsx, csv and parquet; files with a `Data` sheet (as produced by the DBeaver `.dbcnb` exports) are handled transparently.
+See [`docs/data_schema.md`](docs/data_schema.md) for expected columns on each asset. Source SQL for a typical WMS stack in [`sample_data/sql/`](sample_data/sql/). Files with a `Data` sheet (as produced by DBeaver `.dbcnb` exports) are handled transparently.
 
 ---
 
@@ -78,14 +86,26 @@ GET  /                            setup + upload page
 POST /classify                    run (multipart form)
 GET  /runs                        run history
 GET  /runs/{run_id}               results page
+POST /runs/{run_id}/approve       Draft -> Applied
+POST /runs/{run_id}/discard       Draft -> Discarded
 GET  /runs/{run_id}/export.xlsx   Excel download
+GET  /dashboard                   pick two runs to compare
+GET  /dashboard/{a}/{b}           change dashboard
+POST /derivatives/{run_id}        save derivative link confirmations
+GET  /api/runs                    list runs (JSON)
 GET  /api/runs/{run_id}           run meta JSON
-GET  /api/runs/{run_id}/skus      per-SKU rows (?cls=A&limit=100)
+GET  /api/runs/{run_id}/skus      per-SKU rows JSON (?cls=A&limit=100)
 GET  /health                      healthcheck
-GET  /docs                        OpenAPI (FastAPI auto)
+GET  /docs                        OpenAPI
 ```
 
 The `/api/` endpoints are what a future slotting module or WMS integration consumes.
+
+---
+
+## Persistence
+
+All runs live in `runs/classifier.db` (SQLite). Tables: `runs`, `sku_classifications`, `derivative_links`. The file survives restarts, is portable, and can be committed to Git or migrated to Postgres for multi-user deployments.
 
 ---
 
@@ -95,20 +115,22 @@ The `/api/` endpoints are what a future slotting module or WMS integration consu
 addverb-abc-classifier/
 ├── app/
 │   ├── classifier.py        # scoring engine
+│   ├── derivatives.py       # fuzzy parent-SKU suggestion
+│   ├── db.py                # SQLite persistence + compare_runs
 │   ├── loaders.py           # Excel/CSV/Parquet ingestion
 │   ├── validators.py        # quality gates
 │   ├── config.py            # defaults + presets
-│   ├── storage.py           # run persistence
+│   ├── storage.py           # backward-compat shim over db
 │   ├── models.py            # pydantic shapes
 │   └── main.py              # FastAPI routes
-├── static/styles.css        # design tokens (industrial palette)
+├── static/styles.css        # Addverb design tokens
 ├── templates/               # Jinja templates for UI
 ├── docs/
 │   ├── classification_logic.md
 │   └── data_schema.md
-├── sample_data/sql/         # the three WMS extract queries
+├── sample_data/sql/         # the WMS extract queries
 ├── tests/
-├── runs/                    # persisted classification outputs
+├── runs/                    # SQLite DB + per-run xlsx exports
 ├── requirements.txt
 ├── Dockerfile
 └── docker-compose.yml
@@ -118,28 +140,10 @@ addverb-abc-classifier/
 
 ## Roadmap
 
-The module is scoped to classification only. Adjacent work parked separately:
-
-- **R15 (proposed) — XYZ overlay** — demand variability (CoV), drives safety-stock multiplier and forecast model choice
-- **R16 (proposed) — Exception rules** — seasonal, promotional, discontinued, co-pick pairs
-- **v2 — Dynamic slotting** — consumes approved classes; separate module
-
-See [`docs/classification_logic.md`](docs/classification_logic.md) section 10 for scope boundaries.
-
----
-
-## POC results (PetMaxi, 03 Nov 2026)
-
-First full run against real PetMaxi Noida DC-1 data:
-
-| Class | SKUs | % of universe | Volume share | Line share |
-|---|---|---|---|---|
-| A | 29 | 2.5% | 59.8% | 57.6% |
-| B | 86 | 7.3% | 32.9% | 33.6% |
-| C | 172 | 14.6% | 7.3% | 8.7% |
-| N | 889 | 75.6% | 0.0% | 0.0% |
-
-Top 10% of scorable SKUs carry 58% of volume. Clean Pareto.
+- Enterprise approval queue (per-line overrides, bulk actions)
+- API-driven forecast ingestion (vs file upload today)
+- Dynamic slotting — consumes approved classes, separate module
+- Multi-tenant deployment (per-client data isolation)
 
 ---
 

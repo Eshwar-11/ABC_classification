@@ -1,39 +1,61 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{% block title %}Addverb ABC Classifier{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<div class="container">
-  <nav class="topbar">
-    <div class="logo">
-      <div class="logo-mark"><span>A</span><span>B</span><span>C</span></div>
-      <span>Addverb Classifier</span>
-    </div>
-    <div class="divider"></div>
-    <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>New run</a>
-    <a href="/runs" {% if request.url.path.startswith("/runs") %}class="active"{% endif %}>Run history</a>
-    <a href="/docs/logic">Logic & backing</a>
-    <a href="/docs">API</a>
-    <div class="spacer"></div>
-    <span class="code-chip">v{{ version }}</span>
-  </nav>
-  {% block content %}{% endblock %}
-  <div class="statusbar">
-    <span>Addverb ABC Classifier</span>
-    <span class="sep">·</span>
-    <span>Satwik v2.1 scope</span>
-    <span class="sep">·</span>
-    <span>POC build</span>
-    <span style="margin-left:auto">Historical / Forecast / Combined basis supported</span>
+
+<nav class="topbar">
+  <div class="brand">
+    <span class="brand-logo">ADDVERB</span>
+    <span class="brand-product">ABC Classifier</span>
+    {% if request.url.path.startswith("/runs/") and request.url.path != "/runs" %}
+      <span class="brand-site">Run {{ request.url.path.split("/")[-1][:18] }}</span>
+    {% endif %}
   </div>
-</div>
+  <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">New run</a>
+  <a href="/runs" class="nav-link {% if request.url.path == '/runs' %}active{% endif %}">Run history</a>
+  <a href="/dashboard" class="nav-link {% if request.url.path.startswith('/dashboard') %}active{% endif %}">What changes</a>
+  <a href="/docs/logic" class="nav-link {% if request.url.path == '/docs/logic' %}active{% endif %}">Logic</a>
+  <a href="/docs" class="nav-link">API</a>
+  <div class="spacer"></div>
+  <span class="pill"><span class="dot"></span>Local</span>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">◐</button>
+  <span class="chip">v{{ version }}</span>
+</nav>
+
+<main class="container">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="statusbar">
+  <span>Addverb ABC Classifier</span>
+  <span class="sep">·</span>
+  <span>Historical · Forecast · Combined</span>
+  <span class="sep">·</span>
+  <span>SQLite persistence</span>
+  <span style="margin-left:auto">© Addverb Technologies</span>
+</footer>
+
+<script>
+  function toggleTheme() {
+    const r = document.documentElement;
+    const cur = r.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    r.setAttribute('data-theme', next);
+    try { localStorage.setItem('abc_theme', next); } catch (e) {}
+  }
+  try {
+    const saved = localStorage.getItem('abc_theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch (e) {}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

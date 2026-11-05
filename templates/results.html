@@ -4,12 +4,16 @@
 {% set cfg = meta.config %}
 {% set s   = meta.summary %}
 
+<!-- Header -->
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">Run {{ meta.run_id }}</div>
+      <div class="panel-title">
+        {{ meta.client_name or cfg.site_name or "Run" }} · {{ meta.warehouse_code or cfg.warehouse_code }}
+        <span class="status-pill {{ meta.status }}">{{ meta.status }}</span>
+      </div>
       <div class="panel-sub">
-        {{ cfg.site_name }} · {{ cfg.warehouse_code }} ·
+        Run <strong>{{ meta.run_id }}</strong> ·
         basis <strong>{{ cfg.basis }}</strong> ·
         window {{ cfg.historical_window_days }}d ·
         weights {{ (cfg.frequency_weight * 100) | int }}/{{ (cfg.volume_weight * 100) | int }} ·
@@ -20,41 +24,55 @@
     <div style="display:flex;gap:6px">
       <a class="btn" href="/runs/{{ meta.run_id }}/export.xlsx">Export Excel</a>
       <a class="btn" href="/api/runs/{{ meta.run_id }}">JSON</a>
+      {% if meta.status == "draft" %}
+        <form method="post" action="/runs/{{ meta.run_id }}/discard" style="display:inline">
+          <button type="submit" class="btn crit sm">Discard</button>
+        </form>
+        <form method="post" action="/runs/{{ meta.run_id }}/approve" style="display:inline">
+          <input type="hidden" name="approver" value="{{ cfg.operator or 'operator' }}">
+          <button type="submit" class="btn ok">Approve &amp; apply</button>
+        </form>
+      {% endif %}
       <a class="btn primary" href="/">New run</a>
     </div>
   </div>
-  <div class="panel-body">
+</div>
 
-    <!-- Class KPI tiles -->
-    <div class="grid-4">
-      {% for c in s.classes %}
-      <div class="kpi accent-{{ c.class }}">
-        <div class="kpi-label">Class {{ c.class }}</div>
-        <div class="kpi-value">{{ "{:,}".format(c.skus) }}</div>
-        <div class="kpi-sub">
-          {{ c.sku_pct }}% of universe{% if c["class"] != "N" %} ·
-          vol {{ c.volume_pct }}% · lines {{ c.frequency_pct }}%{% endif %}
-          {% if c.dormant_count %}· {{ c.dormant_count }} dormant{% endif %}
-          {% if c.avg_doi_days %}· DOI {{ c.avg_doi_days | round(0) | int }}d{% endif %}
-        </div>
-      </div>
-      {% endfor %}
+<!-- Class KPIs -->
+<div class="grid-4">
+  {% for c in s.classes %}
+  <div class="kpi accent-{{ c.class | lower }}">
+    <div class="kpi-label">Class {{ c.class }}</div>
+    <div class="kpi-value">{{ "{:,}".format(c.skus) }}</div>
+    <div class="kpi-sub">
+      {{ c.sku_pct }}% of universe{% if c["class"] != "N" %} ·
+      vol {{ c.volume_pct }}% · lines {{ c.frequency_pct }}%{% endif %}
+      {% if c.dormant_count %}· {{ c.dormant_count }} dormant{% endif %}
+      {% if c.avg_doi_days %}· DOI {{ c.avg_doi_days | round(0) | int }}d{% endif %}
     </div>
+  </div>
+  {% endfor %}
+</div>
 
-    <h3>Distribution</h3>
+<!-- Distribution bar -->
+<div class="panel" style="margin-top:14px">
+  <div class="panel-body">
+    <div class="panel-section-label">Distribution</div>
     {% set total = s.total_skus %}
     <div class="distbar">
       {% for c in s.classes %}
         {% if c.skus > 0 %}
-        <div style="background: var(--cls-{{ c['class']|lower }}); width: {{ (c.skus/total*100)|round(1) }}%"
+        <div style="background: var(--cls-{{ c['class']|lower }}); width: {{ (c.skus/total*100)|round(2) }}%"
              title="{{ c['class'] }}: {{ c.skus }} SKUs">
-             {{ c['class'] }}{% if c.sku_pct >= 5 %} · {{ c.sku_pct }}%{% endif %}
+          {{ c['class'] }}{% if c.sku_pct >= 5 %} · {{ c.sku_pct }}%{% endif %}
         </div>
         {% endif %}
       {% endfor %}
     </div>
-    <div class="hint">{{ "{:,}".format(s.total_skus) }} SKUs total · {{ "{:,}".format(s.scorable_skus) }} scorable · A ends at rank #{{ s.a_ends_at_rank }} · B ends at #{{ s.b_ends_at_rank }}</div>
-
+    <div class="hint" style="margin-top:8px">
+      {{ "{:,}".format(s.total_skus) }} SKUs total · {{ "{:,}".format(s.scorable_skus) }} scorable ·
+      A ends at rank #{{ s.a_ends_at_rank }} · B ends at #{{ s.b_ends_at_rank }}
+    </div>
   </div>
 </div>
 
@@ -64,23 +82,19 @@
   <div class="panel-head">
     <div>
       <div class="panel-title">Pareto curve — scorable universe</div>
-      <div class="panel-sub">Cumulative volume and frequency by rank. The dotted line is uniform (no concentration).</div>
+      <div class="panel-sub">Cumulative volume and frequency by rank. Dotted line is uniform.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-2">
-      <div class="pareto-wrap">
-        {% set first = meta.pareto_scan[0] %}
-        {% set ten = meta.pareto_scan[1] if meta.pareto_scan|length > 1 else first %}
+      <div class="chart-wrap">
         <svg viewBox="0 0 520 280" style="width:100%;height:auto;display:block">
-          <!-- grid -->
           <g class="grid">
             <line x1="50" y1="40" x2="500" y2="40"/>
             <line x1="50" y1="100" x2="500" y2="100"/>
             <line x1="50" y1="160" x2="500" y2="160"/>
             <line x1="50" y1="220" x2="500" y2="220"/>
           </g>
-          <!-- axes -->
           <g class="axis">
             <line x1="50" y1="40" x2="50" y2="250"/>
             <line x1="50" y1="250" x2="500" y2="250"/>
@@ -93,36 +107,32 @@
             <text x="275" y="268" text-anchor="middle">scorable SKUs (ranked)</text>
             <text x="500" y="268" text-anchor="end">100%</text>
           </g>
-          <!-- A/B/C bands by cutoff % -->
           {% set a_pos = 50 + (cfg.a_cutoff_pct * 4.5) %}
           {% set b_pos = 50 + ((cfg.a_cutoff_pct + cfg.b_cutoff_pct) * 4.5) %}
-          <rect x="50" y="40" width="{{ a_pos - 50 }}" height="210" fill="var(--cls-a-bg)" opacity="0.4"/>
-          <rect x="{{ a_pos }}" y="40" width="{{ b_pos - a_pos }}" height="210" fill="var(--cls-b-bg)" opacity="0.4"/>
-          <rect x="{{ b_pos }}" y="40" width="{{ 500 - b_pos }}" height="210" fill="var(--cls-c-bg)" opacity="0.3"/>
+          <rect x="50" y="40" width="{{ a_pos - 50 }}" height="210" fill="var(--cls-a)" opacity="0.14"/>
+          <rect x="{{ a_pos }}" y="40" width="{{ b_pos - a_pos }}" height="210" fill="var(--cls-b)" opacity="0.14"/>
+          <rect x="{{ b_pos }}" y="40" width="{{ 500 - b_pos }}" height="210" fill="var(--cls-c)" opacity="0.10"/>
           <line x1="{{ a_pos }}" y1="40" x2="{{ a_pos }}" y2="250" stroke="var(--cls-a)" stroke-width="1" stroke-dasharray="3 3"/>
           <line x1="{{ b_pos }}" y1="40" x2="{{ b_pos }}" y2="250" stroke="var(--cls-b)" stroke-width="1" stroke-dasharray="3 3"/>
           <text x="{{ a_pos + 4 }}" y="52" font-family="var(--font-mono)" font-size="10" fill="var(--cls-a)">A ends</text>
           <text x="{{ b_pos + 4 }}" y="52" font-family="var(--font-mono)" font-size="10" fill="var(--cls-b)">B ends</text>
-          <!-- uniform baseline -->
-          <line x1="50" y1="250" x2="500" y2="40" stroke="var(--ink-mute)" stroke-width="1" stroke-dasharray="2 4"/>
-          <!-- actual curve from pareto_scan points -->
+          <line x1="50" y1="250" x2="500" y2="40" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="2 4"/>
           <polyline points="50,250 {% for p in meta.pareto_scan %}{{ 50 + (p.top_pct * 4.5) }},{{ 250 - (p.cum_volume_pct * 2.1) }} {% endfor %}500,40"
-                    fill="none" stroke="var(--ink)" stroke-width="2.2"/>
+                    fill="none" stroke="var(--text-primary)" stroke-width="2.2"/>
           <polyline points="50,250 {% for p in meta.pareto_scan %}{{ 50 + (p.top_pct * 4.5) }},{{ 250 - (p.cum_frequency_pct * 2.1) }} {% endfor %}500,40"
-                    fill="none" stroke="var(--cls-a)" stroke-width="1.6" stroke-dasharray="4 3"/>
+                    fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="4 3"/>
         </svg>
         <div class="legend">
-          <span class="legend-swatch"><i style="background:var(--ink)"></i>cum. volume</span>
-          <span class="legend-swatch"><i style="background:var(--cls-a)"></i>cum. frequency</span>
-          <span class="legend-swatch"><i style="background:var(--ink-mute)"></i>uniform baseline</span>
+          <span class="legend-swatch"><i style="background:var(--text-primary)"></i>cumulative volume</span>
+          <span class="legend-swatch"><i style="background:var(--accent)"></i>cumulative frequency</span>
+          <span class="legend-swatch"><i style="background:var(--text-dim)"></i>uniform baseline</span>
         </div>
       </div>
 
       <div>
-        <h3 style="margin-top:0">Pareto scan</h3>
-        <div class="data-table-wrap">
+        <div class="table-wrap">
           <table class="data">
-            <thead><tr><th>Top</th><th>SKUs</th><th>Cum. volume</th><th>Cum. frequency</th></tr></thead>
+            <thead><tr><th>Top</th><th>SKUs</th><th>Cum. vol</th><th>Cum. freq</th></tr></thead>
             <tbody>
               {% for p in meta.pareto_scan %}
               <tr>
@@ -135,13 +145,13 @@
             </tbody>
           </table>
         </div>
-        <div class="alert ok" style="margin-top:10px">
-          <span>●</span>
-          <div>Top <strong>{{ meta.pareto_scan[1].top_pct if meta.pareto_scan|length > 1 else meta.pareto_scan[0].top_pct }}%</strong>
-            of scorable SKUs carry <strong>{{ meta.pareto_scan[1].cum_volume_pct if meta.pareto_scan|length > 1 else meta.pareto_scan[0].cum_volume_pct }}%</strong> of volume.
-            This is the headline number for the POC deck.
-          </div>
+        {% if meta.pareto_scan|length > 1 %}
+        <div class="alert ok" style="margin-top:12px">
+          <span class="ico">●</span>
+          <div>Top <strong>{{ meta.pareto_scan[1].top_pct }}%</strong> of scorable SKUs carry
+            <strong>{{ meta.pareto_scan[1].cum_volume_pct }}%</strong> of volume. Headline for the deck.</div>
         </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -150,7 +160,7 @@
 
 <!-- Quality checks -->
 <div class="panel">
-  <div class="panel-head"><div><div class="panel-title">Data quality checks</div><div class="panel-sub">Gates are run before scoring. Warnings don't block.</div></div></div>
+  <div class="panel-head"><div><div class="panel-title">Data quality checks</div><div class="panel-sub">Gates ran before scoring. Warnings don't block.</div></div></div>
   <div class="panel-body" style="padding:0">
     {% for c in meta.quality_checks %}
     <div class="qc-row">
@@ -167,15 +177,15 @@
   </div>
 </div>
 
-<!-- Top A SKUs -->
+<!-- Top A -->
 {% if top_a %}
 <div class="panel">
   <div class="panel-head"><div><div class="panel-title">Top A-class SKUs</div><div class="panel-sub">First 25 ranked. Review for operational sanity.</div></div></div>
   <div class="panel-body">
-    <div class="data-table-wrap">
+    <div class="table-wrap">
       <table class="data">
         <thead>
-          <tr><th>Rank</th><th>SKU</th><th>Description</th><th>Class</th><th>Tasks</th><th>Units</th><th>Days picked</th><th>DOI</th><th>Flags</th></tr>
+          <tr><th>Rank</th><th>SKU</th><th>Description</th><th>Class</th><th>Tasks</th><th>Units</th><th>Days picked</th><th>DOI</th></tr>
         </thead>
         <tbody>
           {% for s in top_a %}
@@ -188,7 +198,6 @@
             <td class="num">{{ "{:,.0f}".format(s.vol_qty or 0) }}</td>
             <td class="num">{{ s.picks_days | int }}</td>
             <td class="num">{% if s.doi_days and s.doi_days == s.doi_days %}{{ s.doi_days | round(0) | int }}d{% else %}—{% endif %}</td>
-            <td>{% if s.dormant_flag %}<code class="chip">dormant</code>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -198,12 +207,66 @@
 </div>
 {% endif %}
 
+<!-- Derivative suggestions -->
+{% if suggestions %}
+<div class="panel" id="derivatives">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">New-SKU → parent suggestions <span class="chip">{{ suggestions | length }}</span></div>
+      <div class="panel-sub">No-history SKUs auto-matched against scorable SKUs by code / description similarity. Confirm, re-pick, or leave blank.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <form method="post" action="/derivatives/{{ meta.run_id }}">
+      <input type="hidden" name="confirmed_by" value="{{ cfg.operator or 'operator' }}">
+      {% for s in suggestions %}
+      <div class="deriv-row">
+        <div class="deriv-child">
+          <div class="deriv-child-sku">{{ s.child_sku }}</div>
+          <div class="hint">{{ s.child_description or "(no description)" }}</div>
+          <div class="hint">{{ s.child_status }}</div>
+        </div>
+        <div>
+          {% for cand in s.candidates %}
+          <label class="deriv-candidate-pick">
+            <input type="radio" name="deriv[{{ s.child_sku }}][parent_sku]" value="{{ cand.parent_sku }}">
+            <div style="flex:1">
+              <div><strong>{{ cand.parent_sku }}</strong> <span class="cls cls-{{ cand.parent_class }}" style="margin-left:6px">{{ cand.parent_class }}</span></div>
+              <div class="hint">{{ cand.parent_description or "—" }}</div>
+            </div>
+            <span class="chip">{{ (cand.score * 100) | round(0) | int }}%</span>
+          </label>
+          {% endfor %}
+          <label class="deriv-candidate-pick">
+            <input type="radio" name="deriv[{{ s.child_sku }}][parent_sku]" value="">
+            <span>Leave blank · don't link</span>
+          </label>
+        </div>
+        <div class="deriv-type-select">
+          <select name="deriv[{{ s.child_sku }}][link_type]">
+            <option value="derivative">derivative</option>
+            <option value="complementary">complementary</option>
+            <option value="cannibalistic" {% if s.candidates and s.candidates[0].link_type_guess == 'cannibalistic' %}selected{% endif %}>cannibalistic</option>
+          </select>
+          <input type="number" name="deriv[{{ s.child_sku }}][factor]" value="1.0" min="0" max="5" step="0.05" style="width:70px">
+          <input type="hidden" name="deriv[{{ s.child_sku }}][suggested_by]" value="auto">
+        </div>
+      </div>
+      {% endfor %}
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button type="submit" class="btn primary">Save selections</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <!-- N sample -->
 {% if n_sample %}
 <div class="panel">
-  <div class="panel-head"><div><div class="panel-title">N-class sample (no 90-day activity)</div><div class="panel-sub">These SKUs need inventory-hygiene attention, not classification tuning.</div></div></div>
+  <div class="panel-head"><div><div class="panel-title">N-class sample (no activity in window)</div><div class="panel-sub">Inventory-hygiene attention, not classification tuning.</div></div></div>
   <div class="panel-body">
-    <div class="data-table-wrap">
+    <div class="table-wrap">
       <table class="data">
         <thead><tr><th>SKU</th><th>Description</th><th>Status</th><th>Stock on hand</th></tr></thead>
         <tbody>

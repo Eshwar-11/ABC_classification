@@ -1,35 +1,34 @@
 # Classification logic and backing
 
-This document explains what the classifier does, why each choice was made, and what evidence supports each default. It is the single source of truth for the scoring engine. Code in `app/classifier.py` mirrors this document step for step.
+This document explains what the classifier does, why each default is chosen, and what evidence supports it. Code in `app/classifier.py` mirrors this document step for step.
 
 ## 1. Scope
 
-One run produces one approved ABC class per SKU for one warehouse, based on past outbound activity, optionally blended with forecast. Classes feed slotting, cycle count frequency, and replenishment policy downstream. Slotting itself is out of scope for this module (handed off to a separate consumer).
+One run produces one ABC class per SKU for one warehouse, based on past outbound activity (Historical basis), on forecasted demand (Forecast basis), or a blend (Combined basis). The approved classification feeds downstream slotting, cycle count frequency, and replenishment policy. Slotting itself is a separate module that consumes approved classes; this module does not move SKUs in the warehouse.
 
 ## 2. Inputs
 
-Three tabular files, schema in `docs/data_schema.md`:
+Three required tabular files; a fourth needed only for Forecast or Combined basis:
 
 1. **order_lines** — aggregated outbound picks, SKU × order × day grain
-2. **sku_master** — the SKU universe with status flags
-3. **stock_on_hand** — current snapshot for DOI computation (optional)
+2. **sku_master** — SKU universe with status flags
+3. **stock_on_hand** — optional; enables DOI
+4. **forecast** — required only when basis is Forecast or Combined
 
-A fourth asset, demand_plan, is required only when basis is Forecast or Combined.
+Schemas and sample SQL in `docs/data_schema.md` and `sample_data/sql/`.
 
 ## 3. Scoring
 
-For each SKU over the chosen window:
+For each SKU in the chosen window:
 
-- `frequency` = sum of `n_tasks` — number of pick tasks performed on that SKU
+- `frequency` = sum of `n_tasks` — number of pick tasks on that SKU
 - `volume` = sum of `qty_shipped` — units moved
 
-Why both: frequency alone rewards SKUs picked often even at small quantities (impulse items), volume alone rewards bulky movers even if picked infrequently (B2B pallets). Blending captures both.
+Both captured because they measure different kinds of effort. Frequency rewards SKUs picked often (labour cost, slot access). Volume rewards bulky movers (travel per unit).
 
-### 3.1 Percentile ranks, not raw values
+### 3.1 Percentile ranks
 
-Each metric is converted to its percentile rank within the scorable universe (SKUs with `frequency > 0`). Reason: raw values differ by orders of magnitude between A and C SKUs; ranks preserve ordering while being robust to outliers. A single viral SKU does not compress everyone else's rank.
-
-**D1 default: percentile rank** (vs min-max scaling). Rationale: lumpy portfolios like PetMaxi have heavy tails; min-max would let the top 1% of SKUs flatten the rest.
+Each metric is converted to its percentile rank within the scorable universe (SKUs with `frequency > 0`). Reason: raw values differ by orders of magnitude between A and C; ranks preserve ordering while being robust to outliers.
 
 ### 3.2 Weighted blend
 
@@ -37,45 +36,40 @@ Each metric is converted to its percentile rank within the scorable universe (SK
 score_internal = frequency_weight × freq_percentile + volume_weight × vol_percentile
 ```
 
-Defaults: 70% frequency, 30% volume. Satwik's doc R1 default.
+Defaults: 70% frequency, 30% volume.
 
-Why frequency dominates: in warehouse operations, pick-task count drives labour cost and slotting value. A SKU picked 500 times at 1 unit each needs a prime slot more than one picked twice at 500 units each.
+Frequency dominates because in WMS operations, pick-task count drives labour cost and slotting value. A SKU picked 500 times at 1 unit each needs a prime slot more than one picked twice at 500 units each.
 
-**The score is internal only. It is never shown to the user.** The UI shows rank positions (`#1,310 of 12,480`). This is Satwik's R13 explicit requirement, with two reasons: (1) composite scores invite arguments over inputs; (2) ranks are self-explanatory and operationally actionable.
+**The score is internal only; never shown in the UI.** Screens show rank positions (`#1,310 of 12,480`). This avoids arguments over the composite score and keeps the operational signal concrete.
 
-### 3.3 Combined basis
+### 3.3 Basis
 
-When basis is Combined, daily demand per SKU is computed as:
-
-```
-daily_demand = m × historical_avg_daily + (1 - m) × forecast_avg_daily
-```
-
-Then frequency on the forecast portion is estimated as `historical lines-per-unit × forecast units`. This assumes the pick-task-to-unit ratio is stable per SKU, which holds for most retail picking where case-pack size is fixed.
-
-**D2 default:** historical lines-per-unit applied to forecast units.
+- **Historical**: scores on past N days of pick activity. Requires only order_lines.
+- **Forecast**: scores on next H days of forecast units. Frequency is estimated by applying each SKU's historical lines-per-unit ratio to its forecast units (stable per SKU for most retail picking where case-pack size is fixed).
+- **Combined**: blends historical and forecast daily demand with weight m (default 60% historical). Rebalances when the recent past no longer reflects the near future.
 
 ## 4. Classification
 
-SKUs are ranked by `score_internal` descending. Cut-offs are applied as **% of SKUs by rank over the scorable universe**:
+SKUs are ranked by `score_internal` descending. Cut-offs apply as **% of SKUs by rank over the scorable universe**:
 
 - `A` = top `a_cutoff_pct`% of scorable SKUs
 - `B` = next `b_cutoff_pct`% of scorable SKUs
 - `C` = remainder of scorable SKUs
 - `N` = non-scorable (`frequency = 0` or `status_derived = 'no-history'`)
 
-Why rank-% and not cumulative-value: rank-% is the semantics Satwik's doc specifies (R4). Cumulative-value (textbook 80/15/5) was the original brief intention but revised during design review. Rank-% is also easier to reason about for warehouse operators ("top 10% of my SKUs", not "SKUs that make up 80% of value").
+Rank-% cut-offs (not cumulative-value) are easier for warehouse operators to reason about ("top 10% of my SKUs").
 
 ### 4.1 Preset cut-offs
 
-- **Standard (textbook)** 20/30/50 — classic ABC over a well-shaped portfolio
-- **E-com / pets (10/30/60)** — PetMaxi default; tighter A to fit prime-slot capacity
-- **Pharma / spares (5/15/80)** — flatter head where many critical SKUs sit at low velocity
+- **Standard FMCG** 20/30/50 — classic ABC over a well-shaped portfolio
+- **Distributor / tight head** 10/30/60 — narrow A to fit prime-slot capacity
+- **Pharma / spares** 5/15/80 — flatter head where many critical SKUs sit at low velocity
+- **E-commerce** 15/25/60 — mid-range head for mixed B2C catalogs
 
 ### 4.2 Dormant and no-history
 
-- SKUs with `status_derived = 'dormant'` (last pick >180 days ago by default) are still classified A/B/C if they have any activity in the window, but carry a `dormant_flag = 1`. They are not auto-demoted; the operator decides.
-- SKUs with `status_derived = 'no-history'` or zero frequency in the window land in class `N`. They are not slotted.
+- `dormant` SKUs (last pick > 180 days ago by default) still classify A/B/C if they have any activity in the window, and carry a `dormant_flag = 1`.
+- `no-history` SKUs and any SKU with zero frequency in the window land in class `N`. They aren't slotted.
 
 ## 5. DOI (Days of Inventory)
 
@@ -84,65 +78,64 @@ avg_daily_demand = volume / window_days
 DOI = qty_on_hand / avg_daily_demand   (NaN if demand = 0)
 ```
 
-DOI is reported per class and is used by the Setup page to suggest an appropriate historical window (R5). A warehouse holding ~60 days of A-class stock should classify on a 60-day window, not a 7-day window.
+Per-class DOI is reported on the results page.
 
-## 6. New SKUs
+## 6. Add-on modules
 
-SKUs with less than `minimum_history_days` of data (D6 default: 30) are flagged for manual decision. Treatments supported (Satwik 6.6):
+All add-ons are opt-in per run. The core classifier produces a complete result without any of them.
 
-- **Default** — treat as C or the site default class
-- **Mark as A / B / C** — manual pin
-- **Complementary to `<ref>` with factor `f`** — new SKU demand = f × reference demand, added alongside the reference
-- **Cannibalizes `<ref>` with factor `f`** — new SKU demand = f × reference demand, subtracted from the reference (can move the reference's class → approval needed)
+### 6.1 Derivative suggestions (default on)
 
-Factor defaults to 1.00. The "Compute factor" button estimates it from the median of similar launches in the same material category.
+For each no-history SKU, the app fuzzy-matches its code stem + description against the scorable pool and surfaces up to three parent candidates with a similarity score. The operator confirms, re-picks, or leaves blank. Three link types:
 
-## 7. Snapshot + patch
+- **derivative** — new SKU is a variant/spinoff of the parent; takes no demand from it
+- **complementary** — new SKU is sold alongside; demand = factor × parent, added separately
+- **cannibalistic** — new SKU eats parent's share; demand = factor × parent, subtracted from parent
 
-A run scores the SKU master as it was at `snapshot_time`. Late-arriving SKUs or treatment changes made during the run are **patched** at completion rather than re-running the batch:
+Confirmed links persist in the DB per run.
 
-- A patch recomputes only the affected SKU and its reference (for cannibalizes)
-- A patch that would move a reference SKU's class goes to Approvals
+### 6.2 XYZ overlay (opt-in)
 
-This keeps run time bounded and audit trails clean.
+Classifies SKUs by coefficient of variation of daily demand. Second axis on top of ABC. Drives safety-stock multiplier and forecast-model selection downstream.
 
-## 8. Overrides
+### 6.3 Exception rules (opt-in)
 
-An override is one promote or demote step on one SKU with a captured reason. The classifier's role is to compute the impact (SKU count, volume share, line share, prime-slot delta) and to flag overrides whose new rank is outside the target class boundary. Approval routing follows Satwik's rules 6.3.
+Seasonal, promotional, and co-pick overlays. UI appears on the results page when enabled.
 
-## 9. Design decisions (Satwik §9, resolved)
+## 7. Approvals
 
-| ID | Default | Rationale |
-|---|---|---|
-| D1 | percentile rank | robust to outliers in lumpy data |
-| D2 | hist lines-per-unit × forecast units | stable per-SKU ratio |
-| D3 | lines + units | lines ≈ pick labour, units ≈ volume |
-| D4 | Ops Head + Admin trigger | WM focuses on review |
-| D5 | restricted group greyed | transparency |
-| D6 | 30 days min history | balances new-launch coverage against noise |
-| D7 | within-cutoff auto-apply | avoids approval queue noise |
-| D8 | factor × ref subtracted from ref | resolved 30 Oct 2026 |
-| D9 | block if batch awaits approval | avoids dual-batch confusion |
-| D10 | site config | prime-slot capacity is a physical constraint |
+Two states: **Draft** on creation, **Applied** when the operator clicks Approve & apply. The approval records approver and timestamp in the audit fields. Slotting consumes only Applied runs.
+
+For enterprise clients, a full approval queue (per-line overrides with reject/approve) can be added later without changing the core.
+
+## 8. Persistence
+
+Each run is stored in a local SQLite DB (`runs/classifier.db`):
+
+- `runs` — one row per classification, with config + metrics bundle
+- `sku_classifications` — one row per (run, SKU)
+- `derivative_links` — confirmed new-SKU-to-parent links per run
+
+Previous runs remain readable after app restart. The DB file is portable and can be committed to Git for audit, or moved to Postgres for multi-user deployments.
+
+## 9. Design decisions
+
+| ID | Decision | Default | Rationale |
+|---|---|---|---|
+| D1 | Score normalisation | Percentile rank | Robust to lumpy outliers |
+| D2 | Frequency on forecast basis | Historical lines-per-unit × forecast units | Stable per-SKU ratio |
+| D3 | Units of measure | Order lines + units | Lines ≈ labour, units ≈ volume |
+| D4 | Who runs a batch | Operator-level (configurable later) | Simple for POC |
+| D5 | Restricted group | Shown but greyed (enterprise mode) | Transparency |
+| D6 | Min history | 30 days | Balances new launches vs noise |
+| D7 | Overrides within cut-off | Auto-apply | Keeps approval queue focused |
+| D8 | Cannibalistic semantics | Factor × ref subtracted from ref | Standard |
+| D9 | Running while a batch awaits approval | Blocked (not yet enforced in POC) | Avoids double-queue |
+| D10 | Prime slot capacity source | Site config input | Physical constraint |
 
 ## 10. What is not in v1
 
-- XYZ overlay (R15 proposed) — demand variability, drives safety-stock multiplier
-- Exception rules R16 proposed — seasonal, promotional, discontinued, co-pick
-- Dynamic slotting (v2) — consumes approved classes; separate module
-- Multi-criteria scoring beyond frequency + volume (e.g. margin, criticality)
-
-Each is scoped and tracked separately so adding them does not reshape the core.
-
-## 11. Evidence from PetMaxi POC Run #1
-
-Run on 03 Nov 2026, 90-day window, 70/30 weights, 10/30/60 cut-offs:
-
-- 1,176 SKUs in master, 287 scorable
-- A class: 29 SKUs → 58% of volume, 57% of frequency
-- B class: 86 SKUs → 33% of volume
-- C class: 172 SKUs → 7% of volume
-- N class: 889 SKUs (76% of master, no 90d activity)
-- Agreement with existing `product.velocity` field: 17.2% (the existing field is stale)
-
-The Pareto curve is textbook-clean; top 20% of scorable carries 78.6% of volume.
+- Enterprise approval queue (per-line overrides, bulk actions)
+- Multi-tenant row-level security
+- API-driven forecast ingestion (file upload only for POC)
+- Automated slotting moves (separate module)

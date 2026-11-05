@@ -1,24 +1,17 @@
 """The scoring engine.
 
-Logic (see docs/classification_logic.md for the full rationale):
+Supports three basis modes:
+  - historical: rank SKUs on their past N days of pick-task frequency and volume
+  - forecast:   rank SKUs on their next H days of forecast units (frequency derived
+                from historical lines-per-unit ratio if a history file is also provided;
+                else forecast-only without frequency)
+  - combined:   blend historical and forecast daily demand with weight m
 
-1. Aggregate order lines to SKU grain over the chosen window.
-2. For each SKU compute:
-     frequency = sum of n_tasks over window (pick tasks per SKU)
-     volume    = sum of qty_shipped over window
-3. Produce percentile ranks (D1: percentile, robust to outliers) within the
-   scorable universe (SKUs with frequency > 0).
-4. Score = wF * freq_pct + wV * vol_pct  (internal only, not shown in UI).
-5. Rank 1 = top of class. Non-scorable SKUs get the highest rank number.
-6. Assign classes by rank cut-offs:
-     A = top a% of scorable, B = next b%, C = remainder of scorable,
-     N = no-history or not scoreable.
-7. dormant SKUs still get a class but carry a flag.
+See docs/classification_logic.md for the full rationale.
 """
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from datetime import date, timedelta
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,9 +22,9 @@ from .config import RunConfig
 @dataclass
 class ClassificationResult:
     config: dict
-    summary: dict               # class-level aggregates
-    pareto_scan: list[dict]     # top k%, cumulative vol/freq
-    sku_level: pd.DataFrame     # one row per SKU with class, rank, metrics
+    summary: dict
+    pareto_scan: list[dict]
+    sku_level: pd.DataFrame
     universe_size: int
     scorable_size: int
     a_cutoff_rank: int
@@ -45,56 +38,92 @@ def classify(
     sku_master: pd.DataFrame,
     stock_on_hand: pd.DataFrame | None,
     config: RunConfig,
+    forecast: pd.DataFrame | None = None,
 ) -> ClassificationResult:
-    # --- window filter ---
     today = date.today()
+
+    # --- window filter on history ---
     window_start = today - timedelta(days=config.historical_window_days)
     window_end = today
     ol = order_lines.copy()
     ol = ol[(ol["pick_date"] >= window_start) & (ol["pick_date"] <= window_end)]
 
-    # --- aggregate to SKU grain ---
-    agg = ol.groupby("sku_code", as_index=False).agg(
-        freq_tasks=("n_tasks", "sum"),
-        vol_qty=("qty_shipped", "sum"),
+    # --- historical aggregates (needed even for combined basis) ---
+    hist_agg = ol.groupby("sku_code", as_index=False).agg(
+        hist_freq=("n_tasks", "sum"),
+        hist_vol=("qty_shipped", "sum"),
         picks_days=("pick_date", "nunique"),
         first_pick=("pick_date", "min"),
         last_pick=("pick_date", "max"),
     )
 
-    # --- join master to get full universe ---
+    # --- forecast aggregates ---
+    fc_agg = None
+    if forecast is not None and len(forecast):
+        fc_start = today
+        fc_end = today + timedelta(days=config.forecast_horizon_days)
+        fc = forecast.copy()
+        fc = fc[(fc["forecast_date"] >= fc_start) & (fc["forecast_date"] <= fc_end)]
+        fc_agg = fc.groupby("sku_code", as_index=False).agg(fc_vol=("forecast_units", "sum"))
+
+    # --- derive the metrics used for scoring ---
     master_cols = ["sku_code", "sku_description", "status_derived"]
     if "velocity_declared" in sku_master.columns:
         master_cols.append("velocity_declared")
-    df = sku_master[master_cols].drop_duplicates("sku_code").merge(
-        agg, on="sku_code", how="left"
-    )
-    df["freq_tasks"] = df["freq_tasks"].fillna(0)
-    df["vol_qty"] = df["vol_qty"].fillna(0)
+    df = sku_master[master_cols].drop_duplicates("sku_code").merge(hist_agg, on="sku_code", how="left")
+    df["hist_freq"] = df["hist_freq"].fillna(0)
+    df["hist_vol"] = df["hist_vol"].fillna(0)
     df["picks_days"] = df["picks_days"].fillna(0).astype(int)
+
+    if fc_agg is not None:
+        df = df.merge(fc_agg, on="sku_code", how="left")
+        df["fc_vol"] = df["fc_vol"].fillna(0)
+    else:
+        df["fc_vol"] = 0
+
+    # Basis-specific freq and vol columns
+    if config.basis == "historical":
+        df["freq_tasks"] = df["hist_freq"]
+        df["vol_qty"] = df["hist_vol"]
+    elif config.basis == "forecast":
+        df["vol_qty"] = df["fc_vol"]
+        # Frequency on forecast basis = historical lines-per-unit * forecast units
+        # Fallback to 0 for SKUs with no history (they'd be N anyway).
+        lpu = np.where(df["hist_vol"] > 0, df["hist_freq"] / df["hist_vol"], 0)
+        df["freq_tasks"] = lpu * df["fc_vol"]
+    elif config.basis == "combined":
+        m = config.combined_mix_history_pct / 100.0
+        wd = max(config.historical_window_days, 1)
+        hd = max(config.forecast_horizon_days, 1)
+        hist_daily_vol = df["hist_vol"] / wd
+        fc_daily_vol = df["fc_vol"] / hd
+        blended_daily_vol = m * hist_daily_vol + (1 - m) * fc_daily_vol
+        # Project onto the historical window length for interpretability
+        df["vol_qty"] = blended_daily_vol * wd
+        lpu = np.where(df["hist_vol"] > 0, df["hist_freq"] / df["hist_vol"], 0)
+        df["freq_tasks"] = lpu * df["vol_qty"]
+    else:
+        raise ValueError(f"unknown basis: {config.basis}")
 
     # --- stock on hand ---
     if stock_on_hand is not None and len(stock_on_hand):
         df = df.merge(
             stock_on_hand[["sku_code", "qty_on_hand"]].drop_duplicates("sku_code"),
-            on="sku_code", how="left"
+            on="sku_code", how="left",
         )
         df["qty_on_hand"] = df["qty_on_hand"].fillna(0)
     else:
         df["qty_on_hand"] = 0
 
-    # --- percentile ranks over scorable only ---
+    # --- percentile ranks on scorable only ---
     scorable = df["freq_tasks"] > 0
     df["freq_pct"] = 0.0
     df["vol_pct"] = 0.0
     df.loc[scorable, "freq_pct"] = df.loc[scorable, "freq_tasks"].rank(pct=True, method="average")
     df.loc[scorable, "vol_pct"] = df.loc[scorable, "vol_qty"].rank(pct=True, method="average")
 
-    # --- weighted blend (internal score, never surfaced to UI) ---
     wF, wV = _normalise_weights(config)
     df["_score_internal"] = wF * df["freq_pct"] + wV * df["vol_pct"]
-
-    # --- rank, with non-scorable pushed to the end ---
     df["rank_overall"] = (-df["_score_internal"]).rank(method="first").astype(int)
 
     # --- class assignment ---
@@ -115,7 +144,7 @@ def classify(
     df["class_abc"] = df.apply(_class, axis=1)
     df["dormant_flag"] = (df["status_derived"].fillna("") == "dormant").astype(int)
 
-    # --- DOI per SKU (stock / avg daily demand) ---
+    # --- DOI ---
     window_days = max(config.historical_window_days, 1)
     df["avg_daily_demand"] = df["vol_qty"] / window_days
     df["doi_days"] = np.where(
@@ -124,7 +153,7 @@ def classify(
         np.nan,
     )
 
-    # --- class summary ---
+    # --- summary ---
     total_vol = max(df["vol_qty"].sum(), 1)
     total_freq = max(df["freq_tasks"].sum(), 1)
     summary_rows = []
@@ -136,13 +165,13 @@ def classify(
             "sku_pct": round(len(sub) / max(len(df), 1) * 100, 2),
             "volume": float(sub["vol_qty"].sum()),
             "volume_pct": round(sub["vol_qty"].sum() / total_vol * 100, 2),
-            "frequency": int(sub["freq_tasks"].sum()),
+            "frequency": float(sub["freq_tasks"].sum()),
             "frequency_pct": round(sub["freq_tasks"].sum() / total_freq * 100, 2),
             "dormant_count": int(sub["dormant_flag"].sum()),
             "avg_doi_days": float(sub["doi_days"].mean()) if sub["doi_days"].notna().any() else None,
         })
 
-    # --- pareto scan on scorable only ---
+    # --- pareto scan ---
     pareto = []
     if n_scorable:
         sc = df[scorable].sort_values("rank_overall").reset_index(drop=True)
@@ -158,7 +187,7 @@ def classify(
                 "cum_frequency_pct": round(float(row["cum_freq"]), 2),
             })
 
-    # final tidy of output columns
+    # --- output ---
     out_cols = [
         "sku_code", "sku_description", "status_derived", "velocity_declared",
         "freq_tasks", "vol_qty", "picks_days", "qty_on_hand", "avg_daily_demand",
