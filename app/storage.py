@@ -1,6 +1,10 @@
-"""Run storage. Simple file-based store; swap for a DB in production."""
+"""Run storage. Simple file-based store; swap for a DB in production.
+
+Uses pickle for the SKU-level cache (fast, preserves dtypes, no extra
+dependencies) and xlsx for the user-facing export. Parquet was dropped
+because pyarrow lacks 3.15 wheels at the moment and the dep isn't worth it.
+"""
 from __future__ import annotations
-import io
 import json
 import pickle
 import uuid
@@ -43,7 +47,9 @@ def save_run(run_id: str, result, quality_checks: list) -> Path:
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2, default=str))
 
     # SKU-level results
-    result.sku_level.to_parquet(run_dir / "sku_level.parquet", index=False)
+    # Pickle for fast app-side reloads (preserves dtypes), xlsx for user export.
+    with open(run_dir / "sku_level.pkl", "wb") as f:
+        pickle.dump(result.sku_level, f, protocol=pickle.HIGHEST_PROTOCOL)
     result.sku_level.to_excel(run_dir / "sku_level.xlsx", index=False)
 
     return run_dir
@@ -54,7 +60,17 @@ def load_run(run_id: str) -> tuple[dict, pd.DataFrame]:
     if not run_dir.exists():
         raise FileNotFoundError(f"Run {run_id} not found")
     meta = json.loads((run_dir / "meta.json").read_text())
-    sku_level = pd.read_parquet(run_dir / "sku_level.parquet")
+    # Prefer pickle (new format); fall back to parquet for older runs if present.
+    pkl = run_dir / "sku_level.pkl"
+    pq = run_dir / "sku_level.parquet"
+    if pkl.exists():
+        with open(pkl, "rb") as f:
+            sku_level = pickle.load(f)
+    elif pq.exists():
+        sku_level = pd.read_parquet(pq)   # requires pyarrow
+    else:
+        # Fall back to xlsx if neither cache exists.
+        sku_level = pd.read_excel(run_dir / "sku_level.xlsx")
     return meta, sku_level
 
 
