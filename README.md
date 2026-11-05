@@ -17,7 +17,13 @@ docker compose up --build
 
 ### Without Docker
 
-**Requires Python 3.11, 3.12 or 3.13.** Python 3.14+ will fail because pandas / numpy / pyarrow do not yet ship wheels for those versions; pip will try to build from C source and need Visual Studio build tools on Windows. If you have multiple Pythons installed, use `py -3.12` on Windows or `python3.12` on macOS/Linux.
+**Works on Python 3.11 through 3.15.** Pins in `requirements.txt` are loose ranges so pip picks a wheel for your version:
+
+- 3.11 / 3.12 / 3.13: any pandas 2.2 through 3.1 works
+- 3.14: pandas 2.3.x (2.2.3 has no 3.14 wheels)
+- 3.15: pandas >= 3.0, numpy >= 2.5 (earlier versions have no 3.15 wheels, which is what the "pandas failed to build from source" error means on a fresh 3.15 install with old pins)
+
+If Windows `python` resolves to a Microsoft Store stub (the "install from the Store" error), use `py` instead — the Python launcher. pyarrow is optional on 3.15 and only needed for `.parquet` uploads; `.xlsx` and `.csv` work without it.
 
 ```bash
 python -m venv .venv

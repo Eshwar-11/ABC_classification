@@ -1,9 +1,16 @@
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-jinja2==3.1.4
-python-multipart==0.0.17
-pandas==2.2.3
-numpy==2.1.3
-openpyxl==3.1.5
-pyarrow==18.1.0
-pydantic==2.10.3
+# Loose pins so pip picks a wheel for your Python version.
+# Verified ranges:
+#   Python 3.11, 3.12, 3.13 -> pandas 2.2 .. 3.1, numpy 1.26 .. 2.5
+#   Python 3.15             -> pandas >= 3.0, numpy >= 2.5 (earlier versions have no 3.15 wheels)
+# If you use Python 3.14 (uncommon), stick with pandas 2.3.x which still has 3.14 wheels.
+
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+jinja2>=3.1,<4
+python-multipart>=0.0.17,<1
+pandas>=2.2,<4
+numpy>=1.26,<3
+openpyxl>=3.1,<4
+pyarrow>=18 ; python_version < "3.15"
+# pyarrow on 3.15 is optional; only needed for .parquet uploads. xlsx and csv work without it.
+pydantic>=2.10,<3

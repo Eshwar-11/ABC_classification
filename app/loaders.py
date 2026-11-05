@@ -29,7 +29,13 @@ def _read_tabular(stream: BinaryIO | bytes | str | Path, filename: str) -> pd.Da
     if name.endswith(".csv"):
         return pd.read_csv(io.BytesIO(data_bytes))
     if name.endswith(".parquet"):
-        return pd.read_parquet(io.BytesIO(data_bytes))
+        try:
+            return pd.read_parquet(io.BytesIO(data_bytes))
+        except ImportError as e:
+            raise ValueError(
+                f"Parquet support requires pyarrow, which isn't installed in this Python. "
+                f"Install it with: pip install pyarrow  (or convert the file to xlsx/csv). {e}"
+            )
     raise ValueError(f"Unsupported file type: {filename}. Use xlsx, csv, or parquet.")
 
 
