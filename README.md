@@ -29,9 +29,11 @@ If Windows `python` resolves to a Microsoft Store stub (the "install from the St
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 # then open http://localhost:8000
 ```
+
+For hot-reload during development, also install `watchfiles` and add `--reload` to the uvicorn command. `watchfiles` is separated out because it needs a Rust toolchain to build when pip can't find a wheel for your Python.
 
 ---
 
