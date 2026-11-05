@@ -51,21 +51,27 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "presets": PRESETS,
-        "defaults": RunConfig(),
-        "version": __version__,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "presets": PRESETS,
+            "defaults": RunConfig(),
+            "version": __version__,
+        },
+    )
 
 
 @app.get("/runs", response_class=HTMLResponse)
 def runs_index(request: Request):
-    return templates.TemplateResponse("runs.html", {
-        "request": request,
-        "runs": list_runs(),
-        "version": __version__,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="runs.html",
+        context={
+            "runs": list_runs(),
+            "version": __version__,
+        },
+    )
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -78,26 +84,32 @@ def run_detail(request: Request, run_id: str):
     top_a = sku_level[sku_level["class_abc"] == "A"].head(25).to_dict(orient="records")
     top_c = sku_level[sku_level["class_abc"] == "C"].head(10).to_dict(orient="records")
     n_sample = sku_level[sku_level["class_abc"] == "N"].head(10).to_dict(orient="records")
-    return templates.TemplateResponse("results.html", {
-        "request": request,
-        "meta": meta,
-        "top_a": top_a,
-        "top_c": top_c,
-        "n_sample": n_sample,
-        "version": __version__,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="results.html",
+        context={
+            "meta": meta,
+            "top_a": top_a,
+            "top_c": top_c,
+            "n_sample": n_sample,
+            "version": __version__,
+        },
+    )
 
 
 @app.get("/docs/logic", response_class=HTMLResponse)
 def logic_doc(request: Request):
     logic_path = DOCS_DIR / "classification_logic.md"
     content = logic_path.read_text() if logic_path.exists() else "Logic doc missing."
-    return templates.TemplateResponse("doc.html", {
-        "request": request,
-        "title": "Classification logic",
-        "markdown": content,
-        "version": __version__,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="doc.html",
+        context={
+            "title": "Classification logic",
+            "markdown": content,
+            "version": __version__,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
