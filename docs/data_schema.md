@@ -34,6 +34,17 @@ Grain: one row per (`order_id`, `pick_date`, `sku_code`, `pick_type`). Manual pi
 | last_pick_at | timestamp | no | |
 | velocity_declared | string | no | existing WMS velocity field; ignored |
 | launch_date_source | string | no | 'derived-first-pick' or 'master' |
+| material_category | string | no | enables the Order Profile Category × Week heatmap (C3) |
+| sku_per_bin | int | no | enables the Order Profile bin-equivalent toggle. Units of this SKU that fit in one standard bin. See derivation ladder below. |
+
+**`sku_per_bin` derivation ladder** (data team picks the applicable method per client, records choice in `extract_notes.md`):
+
+1. Direct column if WMS stores it
+2. `floor(bin_usable_volume / sku_unit_volume)` with a configurable pack-factor (default 0.80) when SKU and bin dimensions are both stored
+3. P90 of historical "qty per occupied bin" per SKU from WMS slot history
+4. Flat per-category default supplied by the client
+
+Non-positive values are treated as null; SKUs missing `sku_per_bin` are excluded from bin-equivalent panels and surfaced in the Order Profile diagnostics strip.
 
 **Status derivation rule:**
 
@@ -67,3 +78,16 @@ Running a classification performs these checks before scoring:
 - Stock-on-hand SKUs are in master → warn
 
 A `block` severity failure aborts the run. Warnings are shown but do not stop scoring.
+
+## Order Profile pre-analytics (`/order-profile` route)
+
+Standalone tab that reads the same files as a classification run and builds:
+
+- Section A: 4 headline tiles (units/order, lines/order, units/line, active SKUs/day)
+- Section B: ABC × FMS matrices (SKU count, units, lines). FMS is a display-only axis configurable via `fms_cut_f_plus`, `fms_cut_f`, `fms_cut_m` on the page.
+- Section C: heatmaps (SKU × day, SKU × hour-of-day, Category × week). Hour-of-day needs `first_task_ts` on order_lines; Category needs `material_category` on sku_master. Missing data collapses the panel with a banner.
+- Section D: order stratification by class spread, DOI vs DOH (per-class targets configurable).
+
+**Statistically correct roll-up applied inside the engine:** before any panel computes, order_lines are aggregated at `(order_id, pick_date, sku_code)` grain. One SKU on one order on one date = one orderline. On orderline-grain inputs the roll-up is a no-op; on tote-grain inputs it collapses duplicates and sums qty.
+
+**Window anchor:** the Order Profile tab anchors its window on `max(pick_date)` of the uploaded data, not wall-clock today. Pre-analytics on a historical extract runs correctly without needing a date filter workaround.
