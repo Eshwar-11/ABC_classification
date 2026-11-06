@@ -47,15 +47,25 @@ def compute_validation(sku_level: pd.DataFrame) -> dict[str, Any] | None:
         .to_dict(orient="records")
     )
 
+    # Stale-label breakdown: labelled SKUs with zero activity in the window
+    stale_counts = {
+        row: int(cross.loc[row, "N"]) if row in cross.index and "N" in cross.columns else 0
+        for row in ["A", "B", "C"]
+    }
+    label_totals = {row: int(tagged[tagged["velocity_declared"] == row].shape[0]) for row in ["A", "B", "C"]}
+    stale_pct = {
+        row: round(stale_counts[row] / label_totals[row] * 100, 1) if label_totals[row] else 0.0
+        for row in ["A", "B", "C"]
+    }
+
     return {
         "total_labeled": int(len(tagged)),
         "total_labeled_scorable": int(len(scored)),
         "agreement_overall_pct": round(int(tagged["agrees"].sum()) / len(tagged) * 100, 1),
         "agreement_scorable_pct": round(agree_scored / max(len(scored), 1) * 100, 1),
         "crosstab": cross_dict,
-        "fell_to_n": {
-            row: int(cross.loc[row, "N"]) if row in cross.index and "N" in cross.columns else 0
-            for row in ["A", "B", "C"]
-        },
+        "fell_to_n": stale_counts,
+        "label_totals": label_totals,
+        "stale_pct": stale_pct,
         "disagreement_sample": sample,
     }

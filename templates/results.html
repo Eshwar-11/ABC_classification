@@ -15,8 +15,13 @@
       <div class="panel-sub">
         Run <strong>{{ meta.run_id }}</strong> ·
         basis <strong>{{ cfg.basis }}</strong> ·
-        window {{ cfg.historical_window_days }}d ·
-        weights {{ (cfg.frequency_weight * 100) | int }}/{{ (cfg.volume_weight * 100) | int }} ·
+        window {{ cfg.historical_window_days }}d
+        {% if s.get("active_days") %}
+          <span class="chip" title="Calendar days in window vs days with meaningful pick activity">
+            {{ s.calendar_days }}d calendar · {{ s.active_days }} active
+          </span>
+        {% endif %}
+        · weights {{ (cfg.frequency_weight * 100) | int }}/{{ (cfg.volume_weight * 100) | int }} ·
         cut-offs {{ cfg.a_cutoff_pct | int }}/{{ cfg.b_cutoff_pct | int }}/{{ (100 - cfg.a_cutoff_pct - cfg.b_cutoff_pct) | int }}
         {% if cfg.operator %}· operator {{ cfg.operator }}{% endif %}
       </div>
@@ -199,17 +204,21 @@
       <div class="kpi accent-a">
         <div class="kpi-label">Agreement · overall</div>
         <div class="kpi-value">{{ validation.agreement_overall_pct }}%</div>
-        <div class="kpi-sub">across all labeled SKUs</div>
+        <div class="kpi-sub">
+          across all labeled SKUs. Lower because
+          {{ "{:,}".format(validation.fell_to_n.A + validation.fell_to_n.B + validation.fell_to_n.C) }}
+          labeled SKUs had zero window activity (can't rank zero-movement SKUs).
+        </div>
       </div>
       <div class="kpi accent-b">
         <div class="kpi-label">Agreement · scorable only</div>
         <div class="kpi-value">{{ validation.agreement_scorable_pct }}%</div>
-        <div class="kpi-sub">{{ "{:,}".format(validation.total_labeled_scorable) }} SKUs with activity in window</div>
+        <div class="kpi-sub">{{ "{:,}".format(validation.total_labeled_scorable) }} SKUs with activity in window · apples-to-apples</div>
       </div>
       <div class="kpi accent-n">
         <div class="kpi-label">Labeled but fell to N</div>
         <div class="kpi-value">{{ validation.fell_to_n.A + validation.fell_to_n.B + validation.fell_to_n.C }}</div>
-        <div class="kpi-sub">{{ validation.fell_to_n.A }} A · {{ validation.fell_to_n.B }} B · {{ validation.fell_to_n.C }} C</div>
+        <div class="kpi-sub">{{ validation.fell_to_n.A }} A · {{ validation.fell_to_n.B }} B · {{ validation.fell_to_n.C }} C → see Stale label panel</div>
       </div>
     </div>
 
@@ -254,6 +263,66 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Stale labels — inventory-hygiene finding -->
+{% set stale_total = validation.fell_to_n.A + validation.fell_to_n.B + validation.fell_to_n.C %}
+{% if stale_total > 0 %}
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Stale labels — inventory-hygiene finding</div>
+      <div class="panel-sub">
+        SKUs the client tagged as A / B / C but which had zero picks in the {{ cfg.historical_window_days }}-day window.
+        These aren't a classification disagreement — the SKUs just didn't move. Worth flagging to the client's data / inventory team.
+      </div>
+    </div>
+  </div>
+  <div class="panel-body">
+    {% if validation.stale_pct.A >= 15 %}
+    <div class="alert crit">
+      <span class="ico">!</span>
+      <div>
+        <strong>{{ validation.stale_pct.A }}% of SKUs labeled A had zero picks in {{ cfg.historical_window_days }} days.</strong>
+        This is the headline number for the client conversation. A-class is fast-movers; a third of them sitting idle
+        suggests labels are being set and not maintained.
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="grid-3">
+      <div class="kpi accent-a">
+        <div class="kpi-label">Labeled A · zero activity</div>
+        <div class="kpi-value">{{ validation.fell_to_n.A }}</div>
+        <div class="kpi-sub">
+          of {{ validation.label_totals.A }} A SKUs
+          · <strong>{{ validation.stale_pct.A }}%</strong> stale
+        </div>
+      </div>
+      <div class="kpi accent-b">
+        <div class="kpi-label">Labeled B · zero activity</div>
+        <div class="kpi-value">{{ validation.fell_to_n.B }}</div>
+        <div class="kpi-sub">
+          of {{ validation.label_totals.B }} B SKUs
+          · <strong>{{ validation.stale_pct.B }}%</strong> stale
+        </div>
+      </div>
+      <div class="kpi accent-c">
+        <div class="kpi-label">Labeled C · zero activity</div>
+        <div class="kpi-value">{{ validation.fell_to_n.C }}</div>
+        <div class="kpi-sub">
+          of {{ validation.label_totals.C }} C SKUs
+          · <strong>{{ validation.stale_pct.C }}%</strong> stale
+        </div>
+      </div>
+    </div>
+
+    <div class="hint" style="margin-top:12px">
+      Expected baseline for C: slow movers legitimately sit idle for 90 days. For A and B, &gt;15% stale is usually a
+      data-maintenance question, not a classification issue.
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endif %}
 
 <!-- Top A -->
@@ -264,7 +333,11 @@
     <div class="table-wrap">
       <table class="data">
         <thead>
-          <tr><th>Rank</th><th>SKU</th><th>Description</th><th>Class</th><th>Tasks</th><th>Units</th><th>Days picked</th><th>DOI</th></tr>
+          <tr>
+            <th>Rank</th><th>SKU</th><th>Description</th><th>Class</th>
+            <th>Tasks</th><th>Units</th><th>Days picked</th>
+            <th>Units / active day</th><th>DOI</th>
+          </tr>
         </thead>
         <tbody>
           {% for s in top_a %}
@@ -276,6 +349,7 @@
             <td class="num">{{ "{:,}".format(s.freq_tasks | int) }}</td>
             <td class="num">{{ "{:,.0f}".format(s.vol_qty or 0) }}</td>
             <td class="num">{{ s.picks_days | int }}</td>
+            <td class="num">{% if s.qty_per_active_day %}{{ "{:,.1f}".format(s.qty_per_active_day) }}{% else %}—{% endif %}</td>
             <td class="num">{% if s.doi_days and s.doi_days == s.doi_days %}{{ s.doi_days | round(0) | int }}d{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}

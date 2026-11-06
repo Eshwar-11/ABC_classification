@@ -31,6 +31,8 @@ class ClassificationResult:
     b_cutoff_rank: int
     window_start: date | None
     window_end: date | None
+    calendar_days: int = 0
+    active_days: int = 0
 
 
 def classify(
@@ -56,6 +58,20 @@ def classify(
         first_pick=("pick_date", "min"),
         last_pick=("pick_date", "max"),
     )
+
+    # Operating-calendar metrics: distinct dates with any pick activity in the window.
+    # 'Active day' threshold: a date counts as active if total picks across all SKUs
+    # for that date exceeds ~25% of the median daily pick count. This filters out
+    # shutdown days and weekend/half-day fragments that would skew per-day rates.
+    calendar_days = int(config.historical_window_days)
+    active_days = 0
+    if len(ol):
+        daily_tot = ol.groupby("pick_date")["n_tasks"].sum()
+        if len(daily_tot):
+            med = float(daily_tot.median())
+            threshold = max(med * 0.25, 1.0)
+            active_days = int((daily_tot >= threshold).sum())
+    active_days = max(active_days, 1)
 
     # --- forecast aggregates ---
     fc_agg = None
@@ -144,7 +160,7 @@ def classify(
     df["class_abc"] = df.apply(_class, axis=1)
     df["dormant_flag"] = (df["status_derived"].fillna("") == "dormant").astype(int)
 
-    # --- DOI ---
+    # --- DOI (on calendar days, the standard convention) ---
     window_days = max(config.historical_window_days, 1)
     df["avg_daily_demand"] = df["vol_qty"] / window_days
     df["doi_days"] = np.where(
@@ -153,7 +169,13 @@ def classify(
         np.nan,
     )
 
+    # --- Secondary rate: qty per active-day (fair to SKUs that missed noisy days) ---
+    # Reported for diagnostic; does NOT affect the A/B/C class assignment.
+    df["qty_per_active_day"] = df["vol_qty"] / active_days
+    df["tasks_per_active_day"] = df["freq_tasks"] / active_days
+
     # --- summary ---
+    # Make calendar vs active days available to the summary
     total_vol = max(df["vol_qty"].sum(), 1)
     total_freq = max(df["freq_tasks"].sum(), 1)
     summary_rows = []
@@ -191,7 +213,8 @@ def classify(
     out_cols = [
         "sku_code", "sku_description", "status_derived", "velocity_declared",
         "freq_tasks", "vol_qty", "picks_days", "qty_on_hand", "avg_daily_demand",
-        "doi_days", "freq_pct", "vol_pct", "rank_overall", "class_abc", "dormant_flag",
+        "doi_days", "qty_per_active_day", "tasks_per_active_day",
+        "freq_pct", "vol_pct", "rank_overall", "class_abc", "dormant_flag",
         "first_pick", "last_pick",
     ]
     out_cols = [c for c in out_cols if c in df.columns]
@@ -203,7 +226,9 @@ def classify(
                  "total_skus": int(len(df)),
                  "scorable_skus": n_scorable,
                  "a_ends_at_rank": a_end,
-                 "b_ends_at_rank": b_end},
+                 "b_ends_at_rank": b_end,
+                 "calendar_days": calendar_days,
+                 "active_days": active_days},
         pareto_scan=pareto,
         sku_level=sku_level,
         universe_size=int(len(df)),
@@ -212,6 +237,8 @@ def classify(
         b_cutoff_rank=b_end,
         window_start=window_start,
         window_end=window_end,
+        calendar_days=calendar_days,
+        active_days=active_days,
     )
 
 

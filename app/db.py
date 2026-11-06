@@ -45,24 +45,26 @@ CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 
 CREATE TABLE IF NOT EXISTS sku_classifications (
-    run_id              TEXT NOT NULL,
-    sku_code            TEXT NOT NULL,
-    sku_description     TEXT,
-    status_derived      TEXT,
-    class_abc           TEXT,
-    rank_overall        INTEGER,
-    freq_tasks          REAL,
-    vol_qty             REAL,
-    picks_days          INTEGER,
-    qty_on_hand         REAL,
-    avg_daily_demand    REAL,
-    doi_days            REAL,
-    freq_pct            REAL,
-    vol_pct             REAL,
-    dormant_flag        INTEGER,
-    first_pick          TEXT,
-    last_pick           TEXT,
-    velocity_declared   TEXT,
+    run_id                  TEXT NOT NULL,
+    sku_code                TEXT NOT NULL,
+    sku_description         TEXT,
+    status_derived          TEXT,
+    class_abc               TEXT,
+    rank_overall            INTEGER,
+    freq_tasks              REAL,
+    vol_qty                 REAL,
+    picks_days              INTEGER,
+    qty_on_hand             REAL,
+    avg_daily_demand        REAL,
+    doi_days                REAL,
+    qty_per_active_day      REAL,
+    tasks_per_active_day    REAL,
+    freq_pct                REAL,
+    vol_pct                 REAL,
+    dormant_flag            INTEGER,
+    first_pick              TEXT,
+    last_pick               TEXT,
+    velocity_declared       TEXT,
     PRIMARY KEY (run_id, sku_code),
     FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
 );
@@ -101,6 +103,15 @@ def conn() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with conn() as c:
         c.executescript(SCHEMA)
+        # Safe ALTER for existing v0.3 databases (no-op if column already exists)
+        for stmt in (
+            "ALTER TABLE sku_classifications ADD COLUMN qty_per_active_day REAL",
+            "ALTER TABLE sku_classifications ADD COLUMN tasks_per_active_day REAL",
+        ):
+            try:
+                c.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
 
 # ---------- writes ----------
@@ -153,6 +164,7 @@ def save_run(run_id: str, result, quality_checks: list, client_name: str = "") -
                 _f(r.get("freq_tasks")), _f(r.get("vol_qty")),
                 int(r["picks_days"]) if pd.notna(r.get("picks_days")) else None,
                 _f(r.get("qty_on_hand")), _f(r.get("avg_daily_demand")), _f(r.get("doi_days")),
+                _f(r.get("qty_per_active_day")), _f(r.get("tasks_per_active_day")),
                 _f(r.get("freq_pct")), _f(r.get("vol_pct")),
                 int(r["dormant_flag"]) if pd.notna(r.get("dormant_flag")) else 0,
                 r.get("first_pick") if r.get("first_pick") not in (None, "nan", "NaT") else None,
@@ -167,9 +179,10 @@ def save_run(run_id: str, result, quality_checks: list, client_name: str = "") -
                 class_abc, rank_overall,
                 freq_tasks, vol_qty, picks_days,
                 qty_on_hand, avg_daily_demand, doi_days,
+                qty_per_active_day, tasks_per_active_day,
                 freq_pct, vol_pct, dormant_flag,
                 first_pick, last_pick, velocity_declared
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, rows)
 
 
