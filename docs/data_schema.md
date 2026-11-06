@@ -88,6 +88,6 @@ Standalone tab that reads the same files as a classification run and builds:
 - Section C: heatmaps (SKU × day, SKU × hour-of-day, Category × week). Hour-of-day needs `first_task_ts` on order_lines; Category needs `material_category` on sku_master. Missing data collapses the panel with a banner.
 - Section D: order stratification by class spread, DOI vs DOH (per-class targets configurable).
 
-**Statistically correct roll-up applied inside the engine:** before any panel computes, order_lines are aggregated at `(order_id, pick_date, sku_code)` grain. One SKU on one order on one date = one orderline. On orderline-grain inputs (like Vinayak's reference xlsx) the roll-up is a no-op; on tote-grain inputs it collapses duplicates and sums qty.
+**Statistically correct roll-up applied inside the engine:** before any panel computes, order_lines are aggregated at `(order_id, pick_date, sku_code)` grain. One SKU on one order on one date = one orderline. On orderline-grain inputs the roll-up is a no-op; on tote-grain inputs it collapses duplicates and sums qty.
 
 **Window anchor:** the Order Profile tab anchors its window on `max(pick_date)` of the uploaded data, not wall-clock today. Pre-analytics on a historical extract runs correctly without needing a date filter workaround.

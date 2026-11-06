@@ -18,13 +18,13 @@ Roll-up rule applied here (statistically correct for order-profile metrics):
     any profile metric is computed. One SKU on one order on one date = one
     orderline, regardless of how many pick tasks or totes fulfilled it.
     `qty_shipped` = sum. `n_tasks` is preserved for classifier use but is not
-    the frequency measure for the profile (the profile counts orderlines, not
-    pick tasks, which matches Vinayak's FMS methodology).
+    the frequency measure for the profile (the profile counts orderlines,
+    which is the industry-standard FMS frequency measure).
 
 If the source was tote-grain (multiple rows per `(order_id, sku_code, date)`
 with duplicate pick_type), the roll-up collapses them. If it was already
-orderline-grain, the roll-up is a no-op. Verified against Vinayak's
-Data_examples_r7.xlsx (11,769 rows / 11,769 unique keys, zero duplicates).
+orderline-grain, the roll-up is a no-op. Verified against a representative
+reference fixture during development.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
@@ -290,9 +290,9 @@ def _quick_abc(ol: pd.DataFrame) -> dict[str, str]:
 def _compute_fms(ol: pd.DataFrame, cfg: OrderProfileConfig) -> dict[str, str]:
     """Rank SKUs by orderline count descending, walk cumulative share, bucket.
 
-    This is the statistically clean read of Vinayak's F+/F/M/S methodology:
+    Standard FMS (Fast / Medium / Slow with an optional F+ head) assignment:
     the top band captures the SKUs whose cumulative line count hits the first
-    threshold; subsequent bands capture the next bands. Configurable thresholds
+    threshold; subsequent bands capture the remainder. Configurable thresholds
     live in site_config; the engine does not hard-code them.
     """
     if len(ol) == 0:

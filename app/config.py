@@ -81,9 +81,10 @@ REQUIRED_FIELDS = {
 # ---------------------------------------------------------------------------
 # Order Profile pre-analytics config
 # ---------------------------------------------------------------------------
-# All values here are Admin-configurable per client. Starter values are from
-# Vinayak's reference methodology (06 Nov 2026 walkthrough) and are NOT fixed.
-# FMS is a display-only axis; the classifier assigns one ABC class per SKU.
+# All values here are Admin-configurable per client. Starter values are
+# generic warehouse-operations defaults and are NOT fixed; tune per client
+# in Admin. FMS is a display-only axis; the classifier assigns one ABC
+# class per SKU regardless of what FMS band a SKU lands in.
 
 @dataclass
 class OrderProfileConfig:
