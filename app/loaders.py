@@ -36,6 +36,8 @@ COLUMN_ALIASES = {
     "velocity_declared": ["velocity_declared", "velocity_declared_sas", "velocity_declared_petmaxi",
                           "velocity", "existing_velocity", "abc_label", "abc_existing"],
     "sku_description": ["sku_description", "description", "item_description", "sku_desc"],
+    "sku_per_bin":     ["sku_per_bin", "units_per_bin", "bin_capacity", "qty_per_bin", "units_per_slot"],
+    "material_category": ["material_category", "category", "product_category", "item_category", "sku_category"],
     # stock
     "qty_on_hand":    ["qty_on_hand", "on_hand_qty", "stock_qty", "quantity_on_hand"],
     # forecast
@@ -202,6 +204,16 @@ def load_sku_master(stream, filename: str) -> pd.DataFrame:
     if "velocity_declared" in df.columns:
         df["velocity_declared"] = df["velocity_declared"].astype(str).str.strip()
         df.loc[df["velocity_declared"].isin(["", "nan", "None"]), "velocity_declared"] = None
+
+    # Optional columns used by the Order Profile tab. Both are optional and
+    # their absence disables the related panels/toggles rather than failing.
+    if "sku_per_bin" in df.columns:
+        df["sku_per_bin"] = pd.to_numeric(df["sku_per_bin"], errors="coerce")
+        # Non-positive or NaN values mean "no bin data for this SKU"
+        df.loc[df["sku_per_bin"] <= 0, "sku_per_bin"] = None
+    if "material_category" in df.columns:
+        df["material_category"] = df["material_category"].astype(str).str.strip()
+        df.loc[df["material_category"].isin(["", "nan", "None"]), "material_category"] = None
 
     # Auto-dedupe: keep first occurrence. The QC check downstream reports the dupe count.
     dupe_count = int(df["sku_code"].duplicated().sum())
