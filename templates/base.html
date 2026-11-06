@@ -6,42 +6,101 @@
 <title>{% block title %}Addverb ABC Classifier{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
+<script>
+  (function(){
+    try {
+      const saved = localStorage.getItem('abc-theme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch(e){}
+  })();
+</script>
 </head>
 <body>
 
-<nav class="topbar">
-  <div class="brand">
-    <span class="brand-logo">ADDVERB</span>
-    <span class="brand-product">ABC Classifier</span>
-    {% if request.url.path.startswith("/runs/") and request.url.path != "/runs" %}
-      <span class="brand-site">Run {{ request.url.path.split("/")[-1][:18] }}</span>
-    {% endif %}
+<div class="app">
+
+  <!-- ========== Vertical sidebar ========== -->
+  <aside class="sidebar">
+    <div class="side-brand">
+      <div class="side-brand-mark">A</div>
+      <div class="side-brand-text">
+        <span class="side-brand-name">Addverb</span>
+        <span class="side-brand-product">Classify</span>
+      </div>
+    </div>
+
+    <div class="side-section-title">Workspace</div>
+
+    <a href="/" class="side-item {% if request.url.path == '/' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="side-label">New classification</span>
+    </a>
+
+    <a href="/runs" class="side-item {% if request.url.path == '/runs' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg>
+      <span class="side-label">All runs</span>
+    </a>
+
+    <a href="/dashboard" class="side-item {% if request.url.path.startswith('/dashboard') %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12l4-4 4 4 4-6 6 10"/><path d="M3 20h18"/></svg>
+      <span class="side-label">Changes</span>
+    </a>
+
+    <div class="side-section-title">Reference</div>
+
+    <a href="/docs/logic" class="side-item {% if request.url.path == '/docs/logic' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h12a4 4 0 014 4v12H8a4 4 0 01-4-4V4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span class="side-label">Methodology</span>
+    </a>
+
+    <a href="/docs" class="side-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h3M16 3h3a2 2 0 012 2v14a2 2 0 01-2 2h-3"/><path d="M10 8l-2 4 2 4M14 8l2 4-2 4"/></svg>
+      <span class="side-label">API reference</span>
+    </a>
+
+    <div class="side-spacer"></div>
+
+    <div class="side-footer">
+      <div class="side-user">
+        <div class="side-user-avatar">E</div>
+        <div class="side-user-detail">
+          <div class="side-user-name">Operator</div>
+          <div class="side-user-role">Admin · local</div>
+        </div>
+      </div>
+
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span class="side-label">Theme</span>
+      </button>
+
+      <div class="side-version">v{{ version }}</div>
+    </div>
+  </aside>
+
+  <!-- ========== Main pane ========== -->
+  <div class="main">
+    <header class="main-header">
+      <div class="main-crumbs">
+        {% block crumbs %}
+          <strong>{% block page_title %}Workspace{% endblock %}</strong>
+        {% endblock %}
+      </div>
+      <div class="spacer"></div>
+      <span class="pill"><span class="dot"></span>Local</span>
+      <span class="pill" title="SQLite backing store"><span class="dot" style="background:var(--info); box-shadow:0 0 0 3px rgba(79,184,233,0.14)"></span>SQLite</span>
+    </header>
+
+    <main class="main-body">
+      {% block content %}{% endblock %}
+    </main>
   </div>
-  <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">New run</a>
-  <a href="/runs" class="nav-link {% if request.url.path == '/runs' %}active{% endif %}">Run history</a>
-  <a href="/dashboard" class="nav-link {% if request.url.path.startswith('/dashboard') %}active{% endif %}">What changes</a>
-  <a href="/docs/logic" class="nav-link {% if request.url.path == '/docs/logic' %}active{% endif %}">Logic</a>
-  <a href="/docs" class="nav-link">API</a>
-  <div class="spacer"></div>
-  <span class="pill"><span class="dot"></span>Local</span>
-  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">◐</button>
-  <span class="chip">v{{ version }}</span>
-</nav>
 
-<main class="container">
-{% block content %}{% endblock %}
-</main>
-
-<footer class="statusbar">
-  <span>Addverb ABC Classifier</span>
-  <span class="sep">·</span>
-  <span>Historical · Forecast · Combined</span>
-  <span class="sep">·</span>
-  <span>SQLite persistence</span>
-  <span style="margin-left:auto">© Addverb Technologies</span>
-</footer>
+</div>
 
 <script>
   function toggleTheme() {
@@ -49,12 +108,8 @@
     const cur = r.getAttribute('data-theme');
     const next = cur === 'dark' ? 'light' : 'dark';
     r.setAttribute('data-theme', next);
-    try { localStorage.setItem('abc_theme', next); } catch (e) {}
+    try { localStorage.setItem('abc-theme', next); } catch (e) {}
   }
-  try {
-    const saved = localStorage.getItem('abc_theme');
-    if (saved) document.documentElement.setAttribute('data-theme', saved);
-  } catch (e) {}
 </script>
 {% block scripts %}{% endblock %}
 </body>

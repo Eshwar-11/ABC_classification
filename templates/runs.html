@@ -1,15 +1,23 @@
 {% extends "base.html" %}
+{% block page_title %}All runs{% endblock %}
 {% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>All runs</h1>
+    <div class="sub">Every classification bundled with its config and metrics. Persisted locally.</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a class="btn" href="/dashboard">Compare runs</a>
+    <a class="btn primary" href="/">+ New run</a>
+  </div>
+</div>
 
 <div class="panel">
   <div class="panel-head">
     <div>
       <div class="panel-title">Run history</div>
-      <div class="panel-sub">Every classification run, newest first. Persisted in SQLite — survives app restarts.</div>
-    </div>
-    <div style="display:flex;gap:6px">
-      <a class="btn" href="/dashboard">Compare runs</a>
-      <a class="btn primary" href="/">New run</a>
+      <div class="panel-sub">Newest first. Click Open to review, approve or discard.</div>
     </div>
   </div>
   <div class="panel-body">

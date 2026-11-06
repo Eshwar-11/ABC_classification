@@ -1,7 +1,13 @@
 {% extends "base.html" %}
+{% block page_title %}New classification{% endblock %}
 {% block content %}
 
-<h2 class="page-title">Configure a classification run</h2>
+<div class="page-head">
+  <div>
+    <h1>Configure a new classification</h1>
+    <div class="sub">Upload order lines, SKU master and (optionally) stock on hand. Pick the basis and parameters. Run.</div>
+  </div>
+</div>
 
 <form method="post" action="/classify" enctype="multipart/form-data" id="runForm">
 
