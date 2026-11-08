@@ -34,7 +34,10 @@ from .config import RunConfig, PRESETS, OrderProfileConfig
 from .derivatives import suggest_parents
 from .loaders import load_order_lines, load_sku_master, load_stock_on_hand, load_forecast
 from .order_profile import profile as order_profile
-from .storage import new_run_id, save_run, load_run, export_xlsx_path
+from .storage import (
+    new_run_id, save_run, load_run, export_xlsx_path,
+    save_latest_profile, load_latest_profile, clear_latest_profile,
+)
 from .validation import compute_validation
 from .validators import run_quality_checks, is_blocking
 
@@ -134,10 +137,25 @@ def dashboard_compare(request: Request, run_a: str, run_b: str):
 
 
 @app.get("/order-profile", response_class=HTMLResponse)
-def order_profile_page(request: Request):
-    """Pre-analytics tab (sub-tab of Setup). GET renders the upload form and
-    controls. POST at the same path returns the computed panels on this
-    same page (templates/order_profile.html handles both states)."""
+def order_profile_page(request: Request, fresh: bool = False):
+    """Pre-analytics tab (sub-tab of Setup).
+
+    On GET we hydrate from the latest-run cache so switching sidebar tabs or
+    refreshing the page preserves the result. Pass ?fresh=1 to force the
+    empty-form view (used by the 'Clear' action)."""
+    cached = None if fresh else load_latest_profile()
+    if cached:
+        return templates.TemplateResponse(
+            request=request,
+            name="order_profile.html",
+            context={
+                "defaults": cached["op_config"],
+                "result": cached["result"],
+                "window_days": cached["window_days"],
+                "cached_at": cached.get("saved_at"),
+                "version": __version__,
+            },
+        )
     return templates.TemplateResponse(
         request=request,
         name="order_profile.html",
@@ -147,6 +165,13 @@ def order_profile_page(request: Request):
             "version": __version__,
         },
     )
+
+
+@app.post("/order-profile/clear")
+def order_profile_clear():
+    """Drop the cached latest-run and return the user to an empty form."""
+    clear_latest_profile()
+    return RedirectResponse(url="/order-profile?fresh=1", status_code=303)
 
 
 @app.post("/order-profile", response_class=HTMLResponse)
@@ -196,6 +221,13 @@ async def order_profile_run(
     )
 
     result = order_profile(ol, sm, soh, window_days=window_days, op_config=op_config)
+
+    # Persist as the single latest-slot so nav away + back keeps the result.
+    try:
+        save_latest_profile(result, op_config, window_days)
+    except Exception:
+        # Cache failures must not break the response; log-and-continue.
+        pass
 
     return templates.TemplateResponse(
         request=request,
