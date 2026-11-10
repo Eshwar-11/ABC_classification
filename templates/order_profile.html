@@ -133,17 +133,17 @@
     <div class="grid-3">
       <div>
         <div class="field">order_lines <span style="color:var(--crit)">*</span></div>
-        <input type="file" name="order_lines_file" required accept=".xlsx,.csv,.parquet,.html,.htm">
+        <input type="file" name="order_lines_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         <div class="hint">sku_code, pick_date, qty_shipped, n_tasks</div>
       </div>
       <div>
         <div class="field">sku_master <span style="color:var(--crit)">*</span></div>
-        <input type="file" name="sku_master_file" required accept=".xlsx,.csv,.parquet">
+        <input type="file" name="sku_master_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         <div class="hint">Optional: material_category, sku_per_bin (enables bin-eq. + category panel)</div>
       </div>
       <div>
         <div class="field">stock_on_hand (optional)</div>
-        <input type="file" name="stock_on_hand_file" accept=".xlsx,.csv,.parquet">
+        <input type="file" name="stock_on_hand_file" accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         <div class="hint">sku_code, qty_on_hand</div>
       </div>
     </div>

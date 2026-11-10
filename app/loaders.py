@@ -1,17 +1,33 @@
-"""Excel / CSV / HTML loaders for the input assets.
+"""Tabular loaders for the input assets.
+
+Supported upload types (read):
+  - .xlsx / .xls      Excel
+  - .csv              plain CSV
+  - .csv.gz / .csv.zip gzipped / zipped CSV (pandas unwraps)
+  - .tsv / .txt       tab-separated
+  - .parquet          columnar, best for >1M rows
+  - .feather          Arrow IPC (via pyarrow)
+  - .json / .jsonl    JSON records (array or line-delimited)
+  - .html / .htm      single-table HTML (streamed via lxml.iterparse)
+  - .db / .sqlite / .sqlite3  SQLite database (first user table, or a
+                      table named like the asset if present)
+
+Every supported type normalises down to a pandas DataFrame and round-trips
+cleanly through `df.to_csv()` so downstream exports stay uniform.
 
 Design notes:
-  - Accepts xlsx, csv, parquet, and html (single-table) formats.
-  - HTML is stream-parsed via lxml.iterparse so 100MB+ files don't OOM.
   - Column aliasing: upstream extracts may use client-specific names
     (SAS: n_events, PetMaxi: n_tasks). We normalise on ingest.
   - Order lines may arrive pre-aggregated (PetMaxi pattern) or raw
     (one row per pick task, SAS pattern). We always aggregate to the
     canonical grain (order_id, pick_date, sku_code, pick_type).
+  - Excel has a hard 1,048,576-row cap; extracts beyond that must come
+    as parquet, csv, or sqlite.
 """
 from __future__ import annotations
 import csv
 import io
+import sqlite3
 import tempfile
 from pathlib import Path
 from typing import BinaryIO, IO
@@ -65,10 +81,13 @@ def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
 # -----------------------------------------------------------------------------
 # File readers
 # -----------------------------------------------------------------------------
-def _read_tabular(stream_or_bytes, filename: str) -> pd.DataFrame:
+def _read_tabular(stream_or_bytes, filename: str, asset_hint: str | None = None) -> pd.DataFrame:
     """Dispatch by file extension.
 
     stream_or_bytes may be: bytes, str/Path, or a file-like with .read().
+    asset_hint (optional): "order_lines" | "sku_master" | "stock_on_hand" |
+        "forecast". Used by the SQLite reader to pick the right table when
+        the DB holds more than one.
     """
     name = filename.lower()
 
@@ -78,9 +97,26 @@ def _read_tabular(stream_or_bytes, filename: str) -> pd.DataFrame:
         sheet = "Data" if "Data" in xls.sheet_names else xls.sheet_names[0]
         return pd.read_excel(xls, sheet_name=sheet)
 
+    # Compressed CSV: pandas handles .gz, .zip, .bz2, .xz natively. Map the
+    # extension to the pandas-expected compression name.
+    if name.endswith((".csv.gz", ".csv.zip", ".csv.bz2", ".csv.xz")):
+        data_bytes = _as_bytes(stream_or_bytes)
+        ext = name.rsplit(".", 1)[-1]
+        compression = {"gz": "gzip", "zip": "zip", "bz2": "bz2", "xz": "xz"}[ext]
+        return pd.read_csv(io.BytesIO(data_bytes), compression=compression)
+
     if name.endswith(".csv"):
         data_bytes = _as_bytes(stream_or_bytes)
         return pd.read_csv(io.BytesIO(data_bytes))
+
+    # Tab-separated. `.txt` is accepted as TSV when its content has tabs;
+    # pandas sniffs the delimiter via sep=None with the python engine.
+    if name.endswith((".tsv", ".tab")):
+        data_bytes = _as_bytes(stream_or_bytes)
+        return pd.read_csv(io.BytesIO(data_bytes), sep="\t")
+    if name.endswith(".txt"):
+        data_bytes = _as_bytes(stream_or_bytes)
+        return pd.read_csv(io.BytesIO(data_bytes), sep=None, engine="python")
 
     if name.endswith(".parquet"):
         data_bytes = _as_bytes(stream_or_bytes)
@@ -91,10 +127,99 @@ def _read_tabular(stream_or_bytes, filename: str) -> pd.DataFrame:
                 f"Parquet support requires pyarrow. Install it or convert the file to xlsx/csv. {e}"
             )
 
+    if name.endswith((".feather", ".arrow")):
+        data_bytes = _as_bytes(stream_or_bytes)
+        try:
+            return pd.read_feather(io.BytesIO(data_bytes))
+        except ImportError as e:
+            raise ValueError(
+                f"Feather support requires pyarrow. Install it or convert the file to csv/parquet. {e}"
+            )
+
+    # JSON records: either a top-level array of objects, or JSON-lines
+    # (one record per line). We sniff the first non-whitespace byte.
+    if name.endswith((".json", ".jsonl", ".ndjson")):
+        data_bytes = _as_bytes(stream_or_bytes)
+        is_lines = name.endswith((".jsonl", ".ndjson"))
+        if not is_lines:
+            stripped = data_bytes.lstrip()
+            # A JSONL file whose extension is .json is rare but possible;
+            # sniff: an array starts with '[', a JSONL file starts with '{'.
+            if stripped.startswith(b"{"):
+                is_lines = True
+        return pd.read_json(io.BytesIO(data_bytes), lines=is_lines)
+
+    if name.endswith((".db", ".sqlite", ".sqlite3")):
+        return _read_sqlite(stream_or_bytes, asset_hint)
+
     if name.endswith((".html", ".htm")):
         return _read_html_streaming(stream_or_bytes)
 
-    raise ValueError(f"Unsupported file type: {filename}. Use xlsx, csv, html, or parquet.")
+    raise ValueError(
+        f"Unsupported file type: {filename}. Supported: xlsx/xls, csv (plain or gz/zip/bz2/xz), "
+        f"tsv/tab/txt, parquet, feather/arrow, json/jsonl/ndjson, html/htm, db/sqlite/sqlite3."
+    )
+
+
+def _read_sqlite(stream_or_bytes, asset_hint: str | None) -> pd.DataFrame:
+    """Open a SQLite database and return a DataFrame.
+
+    Table selection rules, in order of preference:
+      1. Exact-name match on the asset_hint (e.g. 'order_lines')
+      2. A table whose name contains the asset_hint
+      3. If only one user table exists, return it
+      4. Otherwise, raise with the list of tables so the extract can be fixed
+    """
+    # SQLite needs a real file handle; materialise to a temp file.
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite") as tmp:
+        if hasattr(stream_or_bytes, "read"):
+            while True:
+                chunk = stream_or_bytes.read(1024 * 1024)
+                if not chunk:
+                    break
+                tmp.write(chunk)
+        elif isinstance(stream_or_bytes, (str, Path)):
+            tmp.write(Path(stream_or_bytes).read_bytes())
+        else:
+            tmp.write(stream_or_bytes)
+        db_path = tmp.name
+
+    try:
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            tables = [r[0] for r in rows]
+
+            if not tables:
+                raise ValueError("SQLite file contains no user tables.")
+
+            target = None
+            if asset_hint:
+                hint = asset_hint.lower()
+                for t in tables:
+                    if t.lower() == hint:
+                        target = t
+                        break
+                if target is None:
+                    for t in tables:
+                        if hint in t.lower():
+                            target = t
+                            break
+            if target is None:
+                if len(tables) == 1:
+                    target = tables[0]
+                else:
+                    raise ValueError(
+                        f"SQLite file has multiple tables ({tables}). Name one of them "
+                        f"to match the asset (e.g. 'order_lines') or supply a single-table db."
+                    )
+            return pd.read_sql_query(f'SELECT * FROM "{target}"', conn)
+    finally:
+        try:
+            Path(db_path).unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def _as_bytes(obj) -> bytes:
@@ -168,7 +293,7 @@ def _read_html_streaming(stream_or_bytes) -> pd.DataFrame:
 # Public loaders (each applies aliasing, type coercion, and aggregation as needed)
 # -----------------------------------------------------------------------------
 def load_order_lines(stream, filename: str) -> pd.DataFrame:
-    df = _read_tabular(stream, filename)
+    df = _read_tabular(stream, filename, asset_hint="order_lines")
     df = _normalise_columns(df)
     _assert_required(df, "order_lines")
 
@@ -194,7 +319,7 @@ def load_order_lines(stream, filename: str) -> pd.DataFrame:
 
 
 def load_sku_master(stream, filename: str) -> pd.DataFrame:
-    df = _read_tabular(stream, filename)
+    df = _read_tabular(stream, filename, asset_hint="sku_master")
     df = _normalise_columns(df)
     _assert_required(df, "sku_master")
 
@@ -225,7 +350,7 @@ def load_sku_master(stream, filename: str) -> pd.DataFrame:
 
 
 def load_stock_on_hand(stream, filename: str) -> pd.DataFrame:
-    df = _read_tabular(stream, filename)
+    df = _read_tabular(stream, filename, asset_hint="stock_on_hand")
     df = _normalise_columns(df)
     _assert_required(df, "stock_on_hand")
     df["sku_code"] = df["sku_code"].astype(str).str.strip()
@@ -234,7 +359,7 @@ def load_stock_on_hand(stream, filename: str) -> pd.DataFrame:
 
 
 def load_forecast(stream, filename: str) -> pd.DataFrame:
-    df = _read_tabular(stream, filename)
+    df = _read_tabular(stream, filename, asset_hint="forecast")
     df = _normalise_columns(df)
     _assert_required(df, "forecast")
     df["sku_code"] = df["sku_code"].astype(str).str.strip()
