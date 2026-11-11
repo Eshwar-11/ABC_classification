@@ -461,28 +461,22 @@
 /* Run hero, scoped to results page */
 .run-hero {
   background:
-    radial-gradient(circle at 92% 0%, rgba(238,49,36,0.18), transparent 55%),
+    radial-gradient(circle at 92% 0%, rgba(238,49,36,0.16), transparent 55%),
     linear-gradient(135deg, var(--surface-raised) 0%, var(--surface-sunken) 100%);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-lg);
-  padding: var(--sp-5) var(--sp-6);
+  padding: var(--sp-5) var(--sp-6) var(--sp-5) calc(var(--sp-6) + 6px);
   margin-bottom: var(--sp-5);
   position: relative;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-.run-hero::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 4px;
-  background: var(--brand-red);
+  box-shadow: inset 4px 0 0 var(--brand-red), var(--shadow-sm);
 }
 .run-hero-crumb {
   display: flex;
   gap: var(--sp-2);
   align-items: center;
   margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
 }
 .run-hero-id {
   font-family: var(--font-mono);

@@ -71,44 +71,62 @@
 
 
 {% if result %}
-<div class="diag-bar">
-  <div class="diag-cell">
-    <div class="diag-k">Window</div>
-    <div class="diag-v">{{ result.window_start }} → {{ result.window_end }}</div>
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Window snapshot</div>
+      <div class="panel-sub">What the engine saw after it ingested the files. Red flags up front, before any analysis.</div>
+    </div>
   </div>
-  <div class="diag-cell">
-    <div class="diag-k">Orderlines</div>
-    <div class="diag-v">{{ "{:,}".format(result.rollup_output_rows) }}</div>
-  </div>
-  <div class="diag-cell">
-    <div class="diag-k">Roll-up</div>
-    {% if result.rollup_applied_rows > 0 %}
-      <div class="diag-v warn">{{ "{:,}".format(result.rollup_applied_rows) }} rows collapsed · tote grain</div>
-    {% else %}
-      <div class="diag-v ok">No-op · orderline grain</div>
+  <div class="panel-body">
+    <div class="diag-bar">
+      <div class="diag-cell">
+        <div class="diag-k">Window</div>
+        <div class="diag-v">{{ result.window_start }} → {{ result.window_end }}</div>
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Orderlines</div>
+        <div class="diag-v">{{ "{:,}".format(result.rollup_output_rows) }}</div>
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Roll-up</div>
+        {% if result.rollup_applied_rows > 0 %}
+          <div class="diag-v warn">{{ "{:,}".format(result.rollup_applied_rows) }} rows collapsed · tote grain</div>
+        {% else %}
+          <div class="diag-v ok">No-op · orderline grain</div>
+        {% endif %}
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Null order_id</div>
+        <div class="diag-v">{{ "{:,}".format(result.null_order_rows) }}</div>
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Vol measure</div>
+        <div class="diag-v">{{ result.tiles.vol_label|capitalize }}</div>
+      </div>
+    </div>
+
+    {% set has_notes = (not result.bin_equivalent_available)
+                    or (result.sku_count_missing_bin > 0)
+                    or (not result.hour_of_day_available)
+                    or (not result.category_available) %}
+    {% if has_notes %}
+    <div style="display:grid;gap:var(--sp-2);margin-top:var(--sp-4)">
+      {% if not result.bin_equivalent_available %}
+        <div class="op-banner">Bin-equivalent toggle needs <code>sku_per_bin</code> on sku_master. Panels fall back to product-dimension values.</div>
+      {% elif result.sku_count_missing_bin > 0 %}
+        <div class="op-banner info"><code>sku_per_bin</code> missing on {{ result.sku_count_missing_bin }} SKUs; those SKUs excluded from bin-equivalent panels.</div>
+      {% endif %}
+      {% if not result.hour_of_day_available %}
+        <div class="op-banner">Timestamp granularity: date only. SKU × hour-of-day panel inactive on this source.</div>
+      {% endif %}
+      {% if not result.category_available %}
+        <div class="op-banner"><code>material_category</code> not on sku_master. Category × week panel inactive.</div>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
-  <div class="diag-cell">
-    <div class="diag-k">Null order_id</div>
-    <div class="diag-v">{{ "{:,}".format(result.null_order_rows) }}</div>
-  </div>
-  <div class="diag-cell">
-    <div class="diag-k">Vol measure</div>
-    <div class="diag-v">{{ result.tiles.vol_label|capitalize }}</div>
-  </div>
 </div>
-
-{% if not result.bin_equivalent_available %}
-  <div class="op-banner">Bin-equivalent toggle needs <code>sku_per_bin</code> on sku_master. Panels fall back to product-dimension values.</div>
-{% elif result.sku_count_missing_bin > 0 %}
-  <div class="op-banner info"><code>sku_per_bin</code> missing on {{ result.sku_count_missing_bin }} SKUs; those SKUs excluded from bin-equivalent panels.</div>
-{% endif %}
-{% if not result.hour_of_day_available %}
-  <div class="op-banner">Timestamp granularity: date only. SKU × hour-of-day panel inactive on this source.</div>
-{% endif %}
-{% if not result.category_available %}
-  <div class="op-banner"><code>material_category</code> not on sku_master. Category × week panel inactive.</div>
-{% endif %}
 {% endif %}
 
 
@@ -234,30 +252,48 @@
 {% if result %}
 
 <!-- Headline tiles -->
-<div class="tiles">
-  <div class="tile">
-    <div class="tile-id">A1</div>
-    <div class="tile-label">Units per order</div>
-    <div class="tile-value">{{ result.tiles.units_per_order or "—" }}<span class="tile-unit">{{ result.tiles.vol_label }}</span></div>
-    <div class="tile-meta">across {{ "{:,}".format(result.tiles.total_orders) }} orders</div>
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Headline shape of orders</div>
+      <div class="panel-sub">Four numbers that tell you what a typical order looks like in this window.</div>
+    </div>
   </div>
-  <div class="tile">
-    <div class="tile-id">A2</div>
-    <div class="tile-label">Lines per order</div>
-    <div class="tile-value">{{ result.tiles.lines_per_order or "—" }}<span class="tile-unit">SKUs</span></div>
-    <div class="tile-meta">avg distinct SKUs per order</div>
-  </div>
-  <div class="tile">
-    <div class="tile-id">A3</div>
-    <div class="tile-label">Units per line</div>
-    <div class="tile-value">{{ result.tiles.units_per_line or "—" }}<span class="tile-unit">units</span></div>
-    <div class="tile-meta">weighted pick size</div>
-  </div>
-  <div class="tile">
-    <div class="tile-id">A4</div>
-    <div class="tile-label">Active SKUs / day</div>
-    <div class="tile-value">{{ result.tiles.active_skus_per_day or "—" }}<span class="tile-unit">SKUs</span></div>
-    <div class="tile-meta">mean over the window</div>
+  <div class="panel-body">
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Units per order</div>
+          <div class="tile-id">A1</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.units_per_order or "—" }}<span class="tile-unit">{{ result.tiles.vol_label }}</span></div>
+        <div class="tile-meta">across {{ "{:,}".format(result.tiles.total_orders) }} orders</div>
+      </div>
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Lines per order</div>
+          <div class="tile-id">A2</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.lines_per_order or "—" }}<span class="tile-unit">SKUs</span></div>
+        <div class="tile-meta">avg distinct SKUs per order</div>
+      </div>
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Units per line</div>
+          <div class="tile-id">A3</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.units_per_line or "—" }}<span class="tile-unit">units</span></div>
+        <div class="tile-meta">weighted pick size</div>
+      </div>
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Active SKUs / day</div>
+          <div class="tile-id">A4</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.active_skus_per_day or "—" }}<span class="tile-unit">SKUs</span></div>
+        <div class="tile-meta">mean over the window</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -267,10 +303,14 @@
   <div class="panel-head">
     <div>
       <div class="panel-title">
-        B · ABC × FMS cluster views
+        ABC × FMS cluster views
+        <span class="chip">B</span>
         <span class="fms-chip">FMS is display only</span>
       </div>
-      <div class="panel-sub">Our single ABC class crossed with a display-only FMS band. The classifier never emits an FMS class.</div>
+      <div class="panel-sub">
+        Where SKUs sit on two axes at once: how fast they move (FMS, display only) and how much they contribute (ABC).
+        Darker cells carry more. Read the F / A corner for "fast + top contributor".
+      </div>
     </div>
     <div class="matrix-legend">
       <span>low</span>
@@ -323,10 +363,13 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">C1 · SKU × day</div>
-      <div class="panel-sub">Top-{{ result.config.top_n_skus }} SKUs by orderline count. Cell = {{ result.tiles.vol_label }}.</div>
+      <div class="panel-title">SKU demand over the window <span class="chip">C1</span></div>
+      <div class="panel-sub">
+        Each row is one of the busiest SKUs. Each column is one day in the window. Darker means more {{ result.tiles.vol_label }} that day.
+        Horizontal streaks are steady movers; vertical streaks are spike days.
+      </div>
     </div>
-    <span class="chip">Top-{{ result.config.top_n_skus }}</span>
+    <span class="chip info">Top-{{ result.config.top_n_skus }}</span>
   </div>
   <div class="panel-body">
     {{ heatmap_table(result.sku_day_heatmap, rows='skus', cols='dates') }}
@@ -342,8 +385,11 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">C2 · SKU × hour of day</div>
-      <div class="panel-sub">Top-{{ result.config.top_n_skus }} SKUs. Cell = order-line count. Needs timestamped order_lines.</div>
+      <div class="panel-title">When those SKUs get picked, by hour <span class="chip">C2</span></div>
+      <div class="panel-sub">
+        Same SKUs as above, but spread across the 24 hours of a day. Tells you whether a SKU peaks in the morning wave,
+        the afternoon wave, or runs flat all day. Needs timestamped order lines.
+      </div>
     </div>
   </div>
   <div class="panel-body">
@@ -364,8 +410,11 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">C3 · Category × week</div>
-      <div class="panel-sub">Seasonality and category mix shift. Cell = {{ result.tiles.vol_label }}.</div>
+      <div class="panel-title">Category mix, week by week <span class="chip">C3</span></div>
+      <div class="panel-sub">
+        One row per product category, one column per week. Darker cells are weeks where that category moved a lot.
+        Use this to spot seasonality or a category gaining and losing weight over time.
+      </div>
     </div>
   </div>
   <div class="panel-body">
@@ -390,8 +439,11 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">D1 · Order stratification</div>
-        <div class="panel-sub">Classes of SKUs present within each order, ranked.</div>
+        <div class="panel-title">What an order usually contains <span class="chip">D1</span></div>
+        <div class="panel-sub">
+          Every order gets a pattern: the set of classes present in it. "A B C" means that order touched one A SKU, one B SKU, one C SKU.
+          The top rows are the most common patterns. If "A" alone is the top pattern, most orders are a single fast-mover.
+        </div>
       </div>
     </div>
     <div class="panel-body">
@@ -426,8 +478,12 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">D2 · DOI vs DOH target</div>
-        <div class="panel-sub">Actual DOI vs target DOH per class. Flag at actual &gt; target × {{ result.config.doi_alert_multiplier }}.</div>
+        <div class="panel-title">Stock vs target, by class <span class="chip">D2</span></div>
+        <div class="panel-sub">
+          How many days of stock the warehouse is holding (actual DOI) against how many days it is supposed to hold (target DOH), per class.
+          The grey tick in each bar is the target; the fill is the actual. If the actual blows past the target by more than
+          {{ result.config.doi_alert_multiplier }}×, the row flips to Over.
+        </div>
       </div>
     </div>
     <div class="panel-body" style="padding: 0 var(--sp-2) var(--sp-3)">
