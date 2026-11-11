@@ -332,19 +332,19 @@
           {% set abcs = cells | map(attribute='abc') | unique | list %}
           {% set fmss = cells | map(attribute='fms') | unique | list %}
           {% set max_v = cells | map(attribute='value') | max %}
-          <div class="matrix-grid">
+          <div class="matrix-grid" style="--matrix-cols: {{ fmss|length }}">
             <div class="matrix-cell header"></div>
             {% for fms in fmss %}<div class="matrix-cell header">{{ fms }}</div>{% endfor %}
             {% for abc in abcs %}
-              <div class="matrix-cell row-header header">{{ abc }}</div>
+              <div class="matrix-cell row-header">{{ abc }}</div>
               {% for fms in fmss %}
                 {% set cell = cells | selectattr('abc','equalto',abc) | selectattr('fms','equalto',fms) | first %}
                 {% set v = cell.value if cell else 0 %}
                 {% set step = ((v / max_v * 8) | round(0, 'floor') | int) if (max_v and v) else 0 %}
                 <div class="matrix-cell"
-                     style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#fff{% else %}var(--ink-primary){% endif %};"
-                     title="{{ abc }} · {{ fms }} = {{ v }}">
-                  {{ v if v else '·' }}
+                     style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#0A1222{% else %}var(--ink-secondary){% endif %};"
+                     title="{{ abc }} &times; {{ fms }} = {{ v }}">
+                  {% if v %}{{ "{:,.0f}".format(v) if v == v|round(0) else "{:,.1f}".format(v) }}{% else %}&middot;{% endif %}
                 </div>
               {% endfor %}
             {% endfor %}

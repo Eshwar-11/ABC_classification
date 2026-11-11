@@ -1453,12 +1453,40 @@ table.data td.num, .num { font-variant-numeric: tabular-nums; }
 .matrix-grid {
   display: grid;
   gap: 4px;
-  grid-template-columns: 48px repeat(auto-fit, minmax(42px, 1fr));
+  /* Column count is set inline from the template via --matrix-cols */
+  grid-template-columns: 44px repeat(var(--matrix-cols, 4), minmax(0, 1fr));
 }
 
-.matrix-grid .matrix-cell { padding: var(--sp-2); }
-.matrix-grid .matrix-cell.header { padding: 4px; }
-.matrix-grid .matrix-cell.row-header { font-weight: 800; color: var(--ink-primary); }
+.matrix-grid .matrix-cell {
+  padding: var(--sp-3) 4px;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+}
+.matrix-grid .matrix-cell.header {
+  padding: 4px;
+  font-size: var(--fs-11);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: transparent;
+  font-weight: 700;
+  min-height: 0;
+}
+.matrix-grid .matrix-cell.row-header {
+  font-size: var(--fs-13);
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 800;
+  color: var(--ink-primary);
+  background: transparent;
+  text-align: right;
+  justify-items: end;
+  padding-right: var(--sp-2);
+}
 
 .matrix-legend {
   display: flex;
