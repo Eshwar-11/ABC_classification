@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block page_title %}Changes{% endblock %}
+{% block topbar_actions %}
+  <a class="btn sm" href="/runs">All runs</a>
+  <a class="btn primary sm" href="/">+ New run</a>
+{% endblock %}
 {% block content %}
 
 <div class="page-head">
@@ -20,35 +24,42 @@
     {% if runs|length < 2 %}
     <div class="alert info"><span class="ico">i</span><div>Need at least 2 runs. <a href="/">Create another run</a> first.</div></div>
     {% else %}
-    <div id="run-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+    <div id="run-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--sp-4)">
       {% for r in runs %}
       <div class="run-picker-card" data-run="{{ r.run_id }}">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <strong class="chip">{{ r.run_id }}</strong>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2)">
+          <code class="chip">{{ r.run_id }}</code>
           <span class="status-pill {{ r.status }}">{{ r.status }}</span>
         </div>
-        <div style="margin-top:8px;font-size:13px;font-weight:500">{{ r.client_name or "—" }}</div>
-        <div class="hint">{{ r.warehouse_code or "—" }} · {{ r.basis }}</div>
-        <div class="hint" style="margin-top:6px">
-          {{ r.universe_size }} SKUs · {{ r.scorable_size }} scorable · {{ r.created_at[:16] }}
+        <div style="margin-top:var(--sp-3);font-size:var(--fs-14);font-weight:600;color:var(--ink-primary)">{{ r.client_name or "Untitled" }}</div>
+        <div class="hint">{{ r.warehouse_code or "—" }} · basis <strong>{{ r.basis }}</strong></div>
+        <div class="hint" style="margin-top:var(--sp-2)">
+          {{ "{:,}".format(r.universe_size) }} SKUs · {{ "{:,}".format(r.scorable_size) }} scorable
         </div>
+        <div class="hint" style="margin-top:4px; font-size:var(--fs-11); color:var(--ink-muted)">{{ r.created_at[:16] }}</div>
       </div>
       {% endfor %}
     </div>
 
-    <div class="panel" style="margin-top:14px;background:var(--surface-2)">
-      <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div>
-          <span class="hint">Baseline (A):</span> <code id="pickA" class="chip">—</code>
-          &nbsp;&nbsp; <span class="hint">Comparison (B):</span> <code id="pickB" class="chip">—</code>
+    <div class="panel" style="margin-top:var(--sp-5);background:var(--surface-sunken);box-shadow:none">
+      <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
+        <div style="display:flex; gap:var(--sp-5); align-items:center; flex-wrap:wrap">
+          <div>
+            <span class="field" style="margin-bottom: 4px">Baseline (A)</span>
+            <code id="pickA" class="chip">—</code>
+          </div>
+          <div>
+            <span class="field" style="margin-bottom: 4px">Comparison (B)</span>
+            <code id="pickB" class="chip">—</code>
+          </div>
         </div>
         <button class="btn primary" id="openBtn" disabled onclick="openCompare()">Open dashboard →</button>
       </div>
     </div>
 
-    <div class="alert info" style="margin-top:14px">
+    <div class="alert info" style="margin-top:var(--sp-4)">
       <span class="ico">i</span>
-      <div>A is the older baseline (what was); B is the newer comparison (what is). The dashboard shows class movements and catalog turnover from A to B.</div>
+      <div>A is the older baseline (what was), B is the newer comparison (what is). The dashboard shows class movements and catalog turnover from A to B.</div>
     </div>
     {% endif %}
   </div>

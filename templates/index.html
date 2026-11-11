@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block page_title %}New classification{% endblock %}
+{% block topbar_actions %}
+  <a href="/runs" class="btn sm">View all runs</a>
+  <a href="/dashboard" class="btn sm">Compare runs</a>
+{% endblock %}
+
 {% block content %}
 
 <div class="page-head">
@@ -15,20 +20,20 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">1 · Scope</div>
-      <div class="panel-sub">Who this run is for and who's running it.</div>
+      <div class="panel-title"><span class="step-num">1</span> Scope</div>
+      <div class="panel-sub">Who this run is for and who is running it.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-2">
       <div>
         <label class="field">Client / site name</label>
-        <input type="text" name="site_name" placeholder="client name" required>
+        <input type="text" name="site_name" placeholder="e.g. SAS Indiana" required>
         <div class="hint">Shown on results and in exports. One client per run.</div>
       </div>
       <div>
         <label class="field">Warehouse code</label>
-        <input type="text" name="warehouse_code" placeholder="DC code" required>
+        <input type="text" name="warehouse_code" placeholder="e.g. SAS_IND" required>
         <div class="hint">Should match the warehouse tag used in order_lines.</div>
       </div>
       <div>
@@ -47,15 +52,15 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">2 · Upload data assets</div>
-      <div class="panel-sub">xlsx, csv or parquet. Schemas in <a href="/docs/logic" class="chip">docs/data_schema.md</a>.</div>
+      <div class="panel-title"><span class="step-num">2</span> Upload data assets</div>
+      <div class="panel-sub">xlsx, csv or parquet. Schemas in <a href="/docs/logic" class="chip">docs / data_schema.md</a>.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-3">
 
       <div>
-        <div class="field">Asset 1 · order_lines <span style="color:var(--crit)">*</span></div>
+        <div class="field">Asset 1 · order_lines <span style="color:var(--danger)">*</span></div>
         <div class="filedrop" data-fd="ol">
           <div class="fd-label">Drop file or click to select</div>
           <div class="fd-hint">Required: sku_code, pick_date, qty_shipped, n_tasks. Aliases accepted (n_events, picked_qty, etc.). HTML extracts streamed.</div>
@@ -65,7 +70,7 @@
       </div>
 
       <div>
-        <div class="field">Asset 2 · sku_master <span style="color:var(--crit)">*</span></div>
+        <div class="field">Asset 2 · sku_master <span style="color:var(--danger)">*</span></div>
         <div class="filedrop" data-fd="sm">
           <div class="fd-label">Drop file or click to select</div>
           <div class="fd-hint">Required: sku_code, sku_description, status_derived</div>
@@ -86,10 +91,10 @@
 
     </div>
 
-    <!-- Forecast upload — shown only when basis != historical -->
+    <!-- Forecast upload, shown only when basis != historical -->
     <div class="grid-2" id="forecast-upload-row" style="margin-top:14px; display:none">
       <div>
-        <div class="field">Asset 4 · forecast <span style="color:var(--crit)">*</span> <span class="chip">Forecast / Combined basis</span></div>
+        <div class="field">Asset 4 · forecast <span style="color:var(--danger)">*</span> <span class="chip brand">Forecast / Combined basis</span></div>
         <div class="filedrop" data-fd="fc">
           <div class="fd-label">Drop file or click to select</div>
           <div class="fd-hint">Required: sku_code, forecast_date, forecast_units</div>
@@ -112,8 +117,8 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">3 · Basis <span style="color:var(--crit)">*</span></div>
-      <div class="panel-sub">No silent default — this decision changes what the run scores on.</div>
+      <div class="panel-title"><span class="step-num">3</span> Basis <span style="color:var(--danger)">*</span></div>
+      <div class="panel-sub">No silent default. This decision changes what the run scores on.</div>
     </div>
   </div>
   <div class="panel-body">
@@ -155,7 +160,7 @@
       <div>
         <label class="field">Combined mix (history %)</label>
         <input type="number" name="combined_mix_history_pct" value="60" min="0" max="100">
-        <div class="hint">Forecast gets 100 − this value.</div>
+        <div class="hint">Forecast gets 100 minus this value.</div>
       </div>
     </div>
   </div>
@@ -165,7 +170,7 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">4 · Ranking weights</div>
+      <div class="panel-title"><span class="step-num">4</span> Ranking weights</div>
       <div class="panel-sub">Blend of frequency (pick tasks) and volume (units) by percentile rank.</div>
     </div>
   </div>
@@ -190,7 +195,7 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">5 · Cut-offs</div>
+      <div class="panel-title"><span class="step-num">5</span> Cut-offs</div>
       <div class="panel-sub">% of scorable SKUs by rank. A + B must be &lt; 100.</div>
     </div>
   </div>
@@ -227,7 +232,7 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">6 · Add-ons <span class="chip">optional</span></div>
+      <div class="panel-title"><span class="step-num">6</span> Add-ons <span class="chip">optional</span></div>
       <div class="panel-sub">Classifier runs without these. Enable per run as needed.</div>
     </div>
   </div>
@@ -237,7 +242,7 @@
         <input type="checkbox" name="enable_derivative_suggestions" checked>
         <div>
           <div class="chk-label">Derivative suggestions</div>
-          <div class="chk-desc">Auto-suggest parent SKUs for no-history items (spinoffs / variants).</div>
+          <div class="chk-desc">Auto-suggest parent SKUs for no-history items (spinoffs, variants).</div>
         </div>
       </label>
       <label class="chk">
@@ -262,7 +267,7 @@
 <details class="panel">
   <summary class="panel-head" style="cursor:pointer">
     <div>
-      <div class="panel-title">7 · Advanced thresholds</div>
+      <div class="panel-title"><span class="step-num">7</span> Advanced thresholds</div>
       <div class="panel-sub">Change only if you know why.</div>
     </div>
   </summary>
@@ -287,7 +292,7 @@
 <!-- Submit -->
 <div class="panel">
   <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-    <div class="hint">Run saves to the local SQLite DB and can be revisited from Run history or What changes.</div>
+    <div class="hint">Run saves to the local SQLite DB and can be revisited from Run history or Changes.</div>
     <div style="display:flex;gap:8px">
       <button type="reset" class="btn ghost">Reset</button>
       <button type="submit" class="btn primary" id="runBtn">Run classification →</button>
@@ -297,12 +302,28 @@
 
 </form>
 
+<style>
+/* Step number pip, local to this page */
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: var(--brand-red);
+  color: var(--ink-on-brand);
+  font-weight: 800;
+  font-size: var(--fs-13);
+  border-radius: var(--r-sm);
+  letter-spacing: 0;
+  flex: 0 0 auto;
+}
+</style>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function(){
-  // file drop state + filename display
   document.querySelectorAll('.filedrop').forEach(fd => {
     const input = fd.querySelector('input[type=file]');
     const fn = fd.querySelector('[data-fn]');
@@ -317,7 +338,6 @@
     });
   });
 
-  // basis radio selected-state + reveal forecast upload
   function updateBasis() {
     const selected = document.querySelector('input[name=basis]:checked');
     document.querySelectorAll('.chk[data-basis]').forEach(el => {
@@ -332,7 +352,6 @@
   document.querySelectorAll('input[name=basis]').forEach(inp => inp.addEventListener('change', updateBasis));
   updateBasis();
 
-  // reset button clears file display
   const resetBtn = document.querySelector('button[type=reset]');
   if (resetBtn) resetBtn.addEventListener('click', () => {
     setTimeout(() => {
@@ -342,7 +361,6 @@
     }, 10);
   });
 
-  // spinner on submit
   document.getElementById('runForm').addEventListener('submit', () => {
     const btn = document.getElementById('runBtn');
     btn.disabled = true;

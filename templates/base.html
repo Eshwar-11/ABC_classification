@@ -3,13 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>{% block title %}Addverb · ABC Classification{% endblock %}</title>
+<title>{% block title %}{% block page_title %}{% endblock %} · Addverb ABC Classify{% endblock %}</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+
 <script>
-  // Theme + sidebar-collapse state restored before first paint to avoid flash.
+  /* Theme + sidebar-collapse state restored before first paint to avoid flash. */
   (function () {
     try {
       const theme = localStorage.getItem('abc-theme');
@@ -30,9 +33,10 @@
   <aside class="sidebar">
 
     <div class="brand">
-      <!-- Addverb mark. Replace with <img src="/static/brand.svg">
-           once the official SVG lands. The red tile + typography
-           below follows Addverb's post-rebrand visual identity. -->
+      {# Sidebar monogram tile. The official Addverb wordmark is a licensed
+         asset: drop <img src="/static/brand.svg" alt="Addverb"> in place of
+         the mark + text once /static/brand.svg lands. Never re-type or
+         re-draw the wordmark. #}
       <div class="brand-mark" aria-label="Addverb">A</div>
       <div class="brand-text">
         <span class="brand-name">ADDVERB<span class="dot">.</span></span>
@@ -46,7 +50,7 @@
       <span class="nav-label">New classification</span>
     </a>
     <a href="/order-profile" class="nav-item {% if request.url.path == '/order-profile' %}active{% endif %}" data-label="Order profile">
-      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/><circle cx="7" cy="15" r="1.4"/><circle cx="11" cy="11" r="1.4"/><circle cx="14" cy="14" r="1.4"/><circle cx="19" cy="8" r="1.4"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/><circle cx="7" cy="15" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="11" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="14" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r="1.4" fill="currentColor" stroke="none"/></svg>
       <span class="nav-label">Order profile</span>
     </a>
     <a href="/runs" class="nav-item {% if request.url.path == '/runs' %}active{% endif %}" data-label="All runs">
@@ -68,7 +72,6 @@
       <span class="nav-label">API reference</span>
     </a>
 
-    <!-- Sidebar footer: user + theme + collapse -->
     <div class="sidebar-footer">
       <span class="user" title="Operator">eshwar@addverb</span>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
@@ -85,13 +88,29 @@
        MAIN
        ===================================================== -->
   <main class="main">
-    {% block content %}{% endblock %}
+
+    <div class="topbar">
+      <div class="breadcrumb">
+        <a href="/">Addverb</a>
+        <span class="sep">/</span>
+        <span>ABC Classify</span>
+        <span class="sep">/</span>
+        <span class="current">{% block crumb %}{{ self.page_title() }}{% endblock %}</span>
+      </div>
+      <div class="topbar-actions">
+        {% block topbar_actions %}{% endblock %}
+      </div>
+    </div>
+
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+
   </main>
 
 </div>
 
 <script>
-  // Theme toggle, selected not auto
   function toggleTheme() {
     const r = document.documentElement;
     const cur = r.getAttribute('data-theme') || 'dark';
@@ -100,7 +119,6 @@
     try { localStorage.setItem('abc-theme', next); } catch (e) {}
   }
 
-  // Sidebar collapse toggle, persists via localStorage
   function toggleCollapse() {
     const app = document.getElementById('app');
     const now = app.getAttribute('data-collapsed') === 'true';
@@ -108,6 +126,7 @@
     app.setAttribute('data-collapsed', next ? 'true' : 'false');
     try { localStorage.setItem('abc-sidebar-collapsed', next ? '1' : '0'); } catch (e) {}
   }
+
   (function hydrateCollapsed() {
     try {
       if (localStorage.getItem('abc-sidebar-collapsed') === '1') {
