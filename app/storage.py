@@ -64,3 +64,55 @@ def list_runs() -> list[dict]:
 
 def export_xlsx_path(run_id: str) -> Path:
     return RUNS_DIR / run_id / "sku_level.xlsx"
+
+
+# ---------------------------------------------------------------------------
+# Order Profile latest-run cache
+# ---------------------------------------------------------------------------
+# Single-slot cache: the most recent /order-profile run is persisted so that
+# navigating away from the tab (sidebar switch, refresh, app restart) does
+# not drop the result. No run history for the Order Profile tab; each new
+# POST overwrites the cache.
+#
+# Stored as a pickle under runs/order_profile_latest.pkl with a small meta
+# dict so the template can show "last run at ...". Pickle is appropriate
+# here because the payload is an internal dataclass (OrderProfileResult)
+# plus a config dataclass; neither leaves the server.
+# ---------------------------------------------------------------------------
+
+_LATEST_PROFILE_PATH = RUNS_DIR / "order_profile_latest.pkl"
+
+
+def save_latest_profile(result, op_config, window_days: int) -> Path:
+    """Persist the most recent Order Profile result (single slot, overwritten)."""
+    payload = {
+        "result": result,
+        "op_config": op_config,
+        "window_days": window_days,
+        "saved_at": datetime.now(timezone.utc),
+    }
+    tmp = _LATEST_PROFILE_PATH.with_suffix(".pkl.tmp")
+    with open(tmp, "wb") as f:
+        pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+    tmp.replace(_LATEST_PROFILE_PATH)  # atomic swap; no partial reads
+    return _LATEST_PROFILE_PATH
+
+
+def load_latest_profile() -> dict | None:
+    """Return {result, op_config, window_days, saved_at} or None if empty."""
+    if not _LATEST_PROFILE_PATH.exists():
+        return None
+    try:
+        with open(_LATEST_PROFILE_PATH, "rb") as f:
+            return pickle.load(f)
+    except (pickle.UnpicklingError, EOFError, AttributeError):
+        # Cache file corrupted or written by an incompatible code version.
+        # Treat as empty rather than crash the GET.
+        return None
+
+
+def clear_latest_profile() -> bool:
+    if _LATEST_PROFILE_PATH.exists():
+        _LATEST_PROFILE_PATH.unlink()
+        return True
+    return False
