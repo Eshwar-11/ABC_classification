@@ -314,6 +314,14 @@ def load_order_lines(stream, filename: str) -> pd.DataFrame:
     for pass_col in ("warehouse_code", "zone_code", "uom", "line_type"):
         if pass_col in df.columns:
             agg_kwargs[pass_col] = (pass_col, "first")
+    # Carry timestamp columns through the aggregation. Without these, panels
+    # that need hour-of-day granularity (e.g. order_profile's C2 heatmap)
+    # silently lose their source data. Match the semantics already used
+    # downstream in order_profile._collapse_to_orderline.
+    if "first_task_ts" in df.columns:
+        agg_kwargs["first_task_ts"] = ("first_task_ts", "min")
+    if "last_task_ts" in df.columns:
+        agg_kwargs["last_task_ts"] = ("last_task_ts", "max")
     df = df.groupby(group_cols, as_index=False, dropna=False).agg(**agg_kwargs)
     return df
 
