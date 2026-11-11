@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}Order profile{% endblock %}
+{% block topbar_actions %}
+  <a class="btn sm" href="/">New classification</a>
+  <a class="btn sm" href="/runs">All runs</a>
+{% endblock %}
 {% block content %}
 
-{# ================================================================
-   Heatmap macro, O(1) lookups. Expects {rows_list, cols_list, lookup, max_v}.
-   Uses sequential ramp (var(--seq-0..8)) so light/dark/CVD stay consistent.
-   ================================================================ #}
+{# Heatmap macro #}
 {% macro heatmap_table(data, rows, cols) %}
   {% set r_list = data[rows] %}
   {% set c_list = data[cols] %}
@@ -25,7 +26,7 @@
               {% set v = lookup.get(r, {}).get(c, 0) %}
               {% set step = ((v / max_v * 8) | round(0, 'floor') | int) if (max_v and v) else 0 %}
               <td class="{% if not v %}cell-0{% endif %}"
-                  style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#fff{% else %}var(--ink-2){% endif %};"
+                  style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#fff{% else %}var(--ink-secondary){% endif %};"
                   title="{{ r }} · {{ c }} = {{ v }}">
                 {% if v %}{{ v }}{% else %}·{% endif %}
               </td>
@@ -41,9 +42,6 @@
 {% endmacro %}
 
 
-<!-- =====================================================
-     PAGE HEAD
-     ===================================================== -->
 <div class="page-head">
   <div>
     <div class="breadcrumb">
@@ -57,9 +55,10 @@
       {% endif %}
     </h1>
     <div class="sub">
-      Visibility of order mix, SKU cadence, and inventory posture before running classification. FMS axis is display only; the classifier assigns one ABC class per SKU.
+      Visibility of order mix, SKU cadence, and inventory posture before running classification.
+      FMS axis is display only, the classifier assigns one ABC class per SKU.
       {% if cached_at %}
-        <br><span style="font-size:12px;color:var(--muted)">
+        <br><span style="font-size:12px;color:var(--ink-muted)">
           Restored from the last run. Upload new files to recompute, or
           <a href="#" onclick="document.getElementById('clearForm').submit();return false;">clear the cache</a>.
         </span>
@@ -71,9 +70,6 @@
 {% if cached_at %}<form id="clearForm" method="post" action="/order-profile/clear" style="display:none"></form>{% endif %}
 
 
-<!-- =====================================================
-     DIAGNOSTIC BAR (only when a result exists)
-     ===================================================== -->
 {% if result %}
 <div class="diag-bar">
   <div class="diag-cell">
@@ -102,7 +98,6 @@
   </div>
 </div>
 
-{# availability banners, only when relevant #}
 {% if not result.bin_equivalent_available %}
   <div class="op-banner">Bin-equivalent toggle needs <code>sku_per_bin</code> on sku_master. Panels fall back to product-dimension values.</div>
 {% elif result.sku_count_missing_bin > 0 %}
@@ -117,34 +112,44 @@
 {% endif %}
 
 
-<!-- =====================================================
-     UPLOAD + CONTROLS (always visible)
-     ===================================================== -->
+<!-- Upload + Controls -->
 <form method="post" action="/order-profile" enctype="multipart/form-data" id="profileForm">
 
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">1 · Upload data</div>
+      <div class="panel-title"><span class="step-num">1</span> Upload data</div>
       <div class="panel-sub">Same files as a classification run. stock_on_hand is optional but unlocks the DOI panel.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-3">
       <div>
-        <div class="field">order_lines <span style="color:var(--crit)">*</span></div>
-        <input type="file" name="order_lines_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
-        <div class="hint">sku_code, pick_date, qty_shipped, n_tasks</div>
+        <div class="field">order_lines <span style="color:var(--danger)">*</span></div>
+        <div class="filedrop" data-fd="ol">
+          <div class="fd-label">Drop file or click to select</div>
+          <div class="fd-hint">sku_code, pick_date, qty_shipped, n_tasks</div>
+          <div class="filename" data-fn></div>
+          <input type="file" name="order_lines_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
+        </div>
       </div>
       <div>
-        <div class="field">sku_master <span style="color:var(--crit)">*</span></div>
-        <input type="file" name="sku_master_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
-        <div class="hint">Optional: material_category, sku_per_bin (enables bin-eq. + category panel)</div>
+        <div class="field">sku_master <span style="color:var(--danger)">*</span></div>
+        <div class="filedrop" data-fd="sm">
+          <div class="fd-label">Drop file or click to select</div>
+          <div class="fd-hint">Optional: material_category, sku_per_bin (enables bin-eq. + category panel)</div>
+          <div class="filename" data-fn></div>
+          <input type="file" name="sku_master_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
+        </div>
       </div>
       <div>
         <div class="field">stock_on_hand (optional)</div>
-        <input type="file" name="stock_on_hand_file" accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
-        <div class="hint">sku_code, qty_on_hand</div>
+        <div class="filedrop" data-fd="so">
+          <div class="fd-label">Drop file or click to select</div>
+          <div class="fd-hint">sku_code, qty_on_hand</div>
+          <div class="filename" data-fn></div>
+          <input type="file" name="stock_on_hand_file" accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
+        </div>
       </div>
     </div>
   </div>
@@ -153,7 +158,7 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">2 · Controls</div>
+      <div class="panel-title"><span class="step-num">2</span> Controls</div>
       <div class="panel-sub">FMS cuts and DOH targets are Admin-configurable in production (site_config). Here they are per run.</div>
     </div>
   </div>
@@ -180,9 +185,9 @@
     </div>
 
     <label class="field">Heatmap top-N SKUs</label>
-    <div class="segmented" style="margin-bottom: var(--sp-2)">
+    <div class="segmented" style="margin-bottom: var(--sp-3)">
       {% for n in [25, 50, 100, 200] %}
-        <input type="radio" name="top_n_skus" id="topn-{{ n }}" value="{{ n }}" {% if n == defaults.top_n_skus %}checked{% endif %} style="display:none">
+        <input type="radio" name="top_n_skus" id="topn-{{ n }}" value="{{ n }}" {% if n == defaults.top_n_skus %}checked{% endif %} style="position:absolute;opacity:0">
         <label for="topn-{{ n }}">{{ n }}</label>
       {% endfor %}
     </div>
@@ -219,7 +224,7 @@
 <div class="panel">
   <div class="panel-body" style="display:flex; justify-content:flex-end; gap:var(--sp-2)">
     <button type="reset" class="btn ghost">Reset</button>
-    <button type="submit" class="btn primary">Build profile</button>
+    <button type="submit" class="btn primary">Build profile →</button>
   </div>
 </div>
 
@@ -228,9 +233,7 @@
 
 {% if result %}
 
-<!-- =====================================================
-     SECTION A — HEADLINE TILES
-     ===================================================== -->
+<!-- Headline tiles -->
 <div class="tiles">
   <div class="tile">
     <div class="tile-id">A1</div>
@@ -259,9 +262,7 @@
 </div>
 
 
-<!-- =====================================================
-     SECTION B — ABC × FMS CLUSTER VIEWS
-     ===================================================== -->
+<!-- ABC × FMS matrix set -->
 <div class="panel">
   <div class="panel-head">
     <div>
@@ -301,7 +302,7 @@
                 {% set v = cell.value if cell else 0 %}
                 {% set step = ((v / max_v * 8) | round(0, 'floor') | int) if (max_v and v) else 0 %}
                 <div class="matrix-cell"
-                     style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#fff{% else %}var(--ink){% endif %};"
+                     style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#fff{% else %}var(--ink-primary){% endif %};"
                      title="{{ abc }} · {{ fms }} = {{ v }}">
                   {{ v if v else '·' }}
                 </div>
@@ -318,9 +319,7 @@
 </div>
 
 
-<!-- =====================================================
-     SECTION C — HEATMAPS
-     ===================================================== -->
+<!-- Heatmaps -->
 <div class="panel">
   <div class="panel-head">
     <div>
@@ -385,9 +384,7 @@
 </div>
 
 
-<!-- =====================================================
-     SECTION D — STRATIFICATION + DOI
-     ===================================================== -->
+<!-- Stratification + DOI -->
 <div class="grid-2">
 
   <div class="panel">
@@ -400,14 +397,14 @@
     <div class="panel-body">
       {% if result.order_stratification %}
         {% set max_pct = (result.order_stratification | map(attribute='pct') | max) or 1 %}
-        <div style="display:grid; grid-template-columns: 1fr 70px 1fr 60px; gap:var(--sp-3); font-size: var(--fs-11); color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; padding: 0 var(--sp-3) var(--sp-2); border-bottom:1px solid var(--border)">
+        <div style="display:grid; grid-template-columns: 1fr 70px 1fr 60px; gap:var(--sp-3); font-size: var(--fs-11); color:var(--ink-muted); text-transform:uppercase; letter-spacing:1px; font-weight:700; padding: 0 var(--sp-3) var(--sp-2); border-bottom:1px solid var(--border-subtle)">
           <div>Pattern</div>
           <div class="text-right">Orders</div>
           <div>Share</div>
           <div class="text-right">%</div>
         </div>
         {% for row in result.order_stratification[:20] %}
-          <div style="display:grid; grid-template-columns: 1fr 70px 1fr 60px; gap:var(--sp-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-2); align-items:center; font-size: var(--fs-13)">
+          <div style="display:grid; grid-template-columns: 1fr 70px 1fr 60px; gap:var(--sp-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-subtle); align-items:center; font-size: var(--fs-13)">
             <div>
               {% for letter in (row.pattern or '').split() %}
                 <span class="cls {{ letter|lower }}">{{ letter }}</span>
@@ -449,9 +446,9 @@
                 {% set ratio_max = 200 %}
                 {% set actual_pct = (row.actual_doi / ratio_max * 100) | round(1) %}
                 {% set target_pct = ((row.target_doh or 0) / ratio_max * 100) | round(1) %}
-                <div style="height:8px; background: var(--surface-3); border-radius: 4px; overflow:hidden; position: relative">
-                  <div style="height:100%; width: {{ actual_pct if actual_pct <= 100 else 100 }}%; background: var(--{{ 'crit' if row.flag else 'cls-a' }}); border-radius: 4px"></div>
-                  <div style="position:absolute; top:-2px; bottom:-2px; left: {{ target_pct }}%; width: 2px; background: var(--muted)"></div>
+                <div style="height:8px; background: var(--surface-sunken); border-radius: 4px; overflow:hidden; position: relative">
+                  <div style="height:100%; width: {{ actual_pct if actual_pct <= 100 else 100 }}%; background: var(--{{ 'danger' if row.flag else 'cls-a' }}); border-radius: 4px"></div>
+                  <div style="position:absolute; top:-2px; bottom:-2px; left: {{ target_pct }}%; width: 2px; background: var(--ink-muted)"></div>
                 </div>
               </td>
               <td class="num">{{ row.skus }}</td>
@@ -469,9 +466,7 @@
 </div>
 
 
-<!-- =====================================================
-     SUGGESTIONS
-     ===================================================== -->
+<!-- Suggestions -->
 {% if result.suggestions %}
 <div class="panel">
   <div class="panel-head">
@@ -488,7 +483,7 @@
             <span class="chip brand">from {{ s.source_panel }}</span>
             <span class="tgt">Setup.{{ s.target }} = {{ s.value }}</span>
           </div>
-          <div style="color: var(--ink-2); font-size: var(--fs-13)">{{ s.reason }}</div>
+          <div style="color: var(--ink-secondary); font-size: var(--fs-13)">{{ s.reason }}</div>
         </div>
         <button type="button" class="btn primary sm" disabled title="Wiring to /classify coming in v0.7">Apply</button>
       </div>
@@ -500,4 +495,41 @@
 
 {% endif %}
 
+<style>
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: var(--brand-red);
+  color: var(--ink-on-brand);
+  font-weight: 800;
+  font-size: var(--fs-13);
+  border-radius: var(--r-sm);
+  letter-spacing: 0;
+  flex: 0 0 auto;
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  document.querySelectorAll('.filedrop').forEach(fd => {
+    const input = fd.querySelector('input[type=file]');
+    const fn = fd.querySelector('[data-fn]');
+    if (!input || !fn) return;
+    input.addEventListener('change', () => {
+      if (input.files && input.files[0]) {
+        fn.textContent = input.files[0].name;
+        fd.classList.add('has-file');
+      } else {
+        fn.textContent = '';
+        fd.classList.remove('has-file');
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}
