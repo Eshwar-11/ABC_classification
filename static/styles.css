@@ -802,6 +802,42 @@ input[type="range"] {
   height: 20px;
 }
 
+/* Basis-fields: packs tightly when some fields hide (unlike grid-3 which leaves gaps) */
+.basis-fields { display: flex; gap: var(--sp-4); flex-wrap: wrap; }
+.basis-field { flex: 1 1 240px; min-width: 240px; }
+
+/* Ranking-weights: single slider with Frequency / Volume ends */
+.weight-split {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr minmax(96px, auto);
+  gap: var(--sp-5);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+}
+.weight-side { text-align: center; }
+.weight-side.weight-right { text-align: center; }
+.weight-side .weight-label {
+  font-size: var(--fs-11);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.weight-side .weight-value {
+  font-size: var(--fs-28);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  color: var(--brand-red);
+}
+.weight-side.weight-right .weight-value { color: var(--cls-b); }
+.weight-slider { margin: 0 !important; }
+
 input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
   background: linear-gradient(to right, var(--brand-red), var(--brand-blue));
