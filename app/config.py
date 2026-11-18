@@ -77,6 +77,55 @@ REQUIRED_FIELDS = {
     "forecast":    {"sku_code", "forecast_date", "forecast_units"},
 }
 
+
+# ---------------------------------------------------------------------------
+# Order Profile pre-analytics config
+# ---------------------------------------------------------------------------
+# All values here are Admin-configurable per client. Starter values are
+# generic warehouse-operations defaults and are NOT fixed; tune per client
+# in Admin. FMS is a display-only axis; the classifier assigns one ABC
+# class per SKU regardless of what FMS band a SKU lands in.
+
+@dataclass
+class OrderProfileConfig:
+    # FMS cuts: cumulative order-line share thresholds. SKUs ranked by line
+    # frequency descending. F+ holds the top band, F the next, M the next,
+    # S the remainder. Three thresholds define four bands.
+    fms_cut_f_plus: float = 0.60
+    fms_cut_f: float = 0.80
+    fms_cut_m: float = 0.95
+
+    # DOH (Days-on-Hand) targets per ABC class. Used by panel D2 to flag SKUs
+    # where actual DOI drifts beyond 1.5x target.
+    doh_target_a_plus: float = 6.0
+    doh_target_a: float = 8.0
+    doh_target_b: float = 15.0
+    doh_target_c: float = 20.0
+
+    # Heatmap display controls
+    top_n_skus: int = 100              # Rows in C1, C2. Allowed: 25, 50, 100, 200.
+    bin_equivalent_mode: bool = False  # Global toggle: units vs bin-equivalents.
+
+    # DOI flag threshold: panel D2 flags actual > (target * doi_alert_multiplier)
+    doi_alert_multiplier: float = 1.5
+
+    def fms_bands(self) -> list[tuple[str, float]]:
+        """Return the (label, cumulative_upper_bound) list in rank order."""
+        return [
+            ("F+", self.fms_cut_f_plus),
+            ("F",  self.fms_cut_f),
+            ("M",  self.fms_cut_m),
+            ("S",  1.0),
+        ]
+
+    def doh_targets(self) -> dict[str, float]:
+        return {
+            "A+": self.doh_target_a_plus,
+            "A":  self.doh_target_a,
+            "B":  self.doh_target_b,
+            "C":  self.doh_target_c,
+        }
+
 # Quality gates — soft limits for warnings; hard limits block the run
 QUALITY_GATES = {
     "sku_coverage_min": 0.97,

@@ -83,6 +83,8 @@ See [`docs/data_schema.md`](docs/data_schema.md) for expected columns on each as
 
 ```
 GET  /                            setup + upload page
+GET  /order-profile               pre-analytics tab (upload + controls)
+POST /order-profile               compute panels; same page re-renders with 12 panels
 POST /classify                    run (multipart form)
 GET  /runs                        run history
 GET  /runs/{run_id}               results page

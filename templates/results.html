@@ -1,50 +1,53 @@
 {% extends "base.html" %}
 {% block page_title %}{{ meta.client_name or meta.config.site_name or "Run" }} · {{ meta.run_id }}{% endblock %}
+{% block topbar_actions %}
+  <a class="btn sm" href="/runs/{{ meta.run_id }}/export.xlsx">Export Excel</a>
+  <a class="btn sm" href="/api/runs/{{ meta.run_id }}">JSON</a>
+  {% if meta.status == "draft" %}
+    <form method="post" action="/runs/{{ meta.run_id }}/discard" style="display:inline">
+      <button type="submit" class="btn crit sm">Discard</button>
+    </form>
+    <form method="post" action="/runs/{{ meta.run_id }}/approve" style="display:inline">
+      <input type="hidden" name="approver" value="{{ meta.config.operator or 'operator' }}">
+      <button type="submit" class="btn ok sm">Approve &amp; apply</button>
+    </form>
+  {% endif %}
+  <a class="btn primary sm" href="/">+ New run</a>
+{% endblock %}
+
 {% block content %}
 
 {% set cfg = meta.config %}
 {% set s   = meta.summary %}
 
-<!-- Header -->
-<div class="panel">
-  <div class="panel-head">
-    <div>
-      <div class="panel-title">
-        {{ meta.client_name or cfg.site_name or "Run" }} · {{ meta.warehouse_code or cfg.warehouse_code }}
-        <span class="status-pill {{ meta.status }}">{{ meta.status }}</span>
-      </div>
-      <div class="panel-sub">
-        Run <strong>{{ meta.run_id }}</strong> ·
-        basis <strong>{{ cfg.basis }}</strong> ·
-        window {{ cfg.historical_window_days }}d
-        {% if s.get("active_days") %}
-          <span class="chip" title="Calendar days in window vs days with meaningful pick activity">
-            {{ s.calendar_days }}d calendar · {{ s.active_days }} active
-          </span>
-        {% endif %}
-        · weights {{ (cfg.frequency_weight * 100) | int }}/{{ (cfg.volume_weight * 100) | int }} ·
-        cut-offs {{ cfg.a_cutoff_pct | int }}/{{ cfg.b_cutoff_pct | int }}/{{ (100 - cfg.a_cutoff_pct - cfg.b_cutoff_pct) | int }}
-        {% if cfg.operator %}· operator {{ cfg.operator }}{% endif %}
-      </div>
+<!-- Run hero -->
+<div class="run-hero">
+  <div class="run-hero-main">
+    <div class="run-hero-crumb">
+      <span class="chip brand">Run</span>
+      <code class="run-hero-id">{{ meta.run_id }}</code>
+      <span class="status-pill {{ meta.status }}">{{ meta.status }}</span>
     </div>
-    <div style="display:flex;gap:6px">
-      <a class="btn" href="/runs/{{ meta.run_id }}/export.xlsx">Export Excel</a>
-      <a class="btn" href="/api/runs/{{ meta.run_id }}">JSON</a>
-      {% if meta.status == "draft" %}
-        <form method="post" action="/runs/{{ meta.run_id }}/discard" style="display:inline">
-          <button type="submit" class="btn crit sm">Discard</button>
-        </form>
-        <form method="post" action="/runs/{{ meta.run_id }}/approve" style="display:inline">
-          <input type="hidden" name="approver" value="{{ cfg.operator or 'operator' }}">
-          <button type="submit" class="btn ok">Approve &amp; apply</button>
-        </form>
+    <h1 class="run-hero-title">
+      {{ meta.client_name or cfg.site_name or "Untitled run" }}
+      <span class="run-hero-wh">· {{ meta.warehouse_code or cfg.warehouse_code }}</span>
+    </h1>
+    <div class="run-hero-meta">
+      <span><span class="meta-k">Basis</span> <strong>{{ cfg.basis }}</strong></span>
+      <span><span class="meta-k">Window</span> <strong>{{ cfg.historical_window_days }}d</strong></span>
+      {% if s.get("active_days") %}
+      <span class="chip" title="Calendar days in window vs days with meaningful pick activity">
+        {{ s.calendar_days }}d calendar · {{ s.active_days }} active
+      </span>
       {% endif %}
-      <a class="btn primary" href="/">New run</a>
+      <span><span class="meta-k">Weights</span> <strong>{{ (cfg.frequency_weight * 100) | int }}/{{ (cfg.volume_weight * 100) | int }}</strong></span>
+      <span><span class="meta-k">Cut-offs</span> <strong>{{ cfg.a_cutoff_pct | int }}/{{ cfg.b_cutoff_pct | int }}/{{ (100 - cfg.a_cutoff_pct - cfg.b_cutoff_pct) | int }}</strong></span>
+      {% if cfg.operator %}<span><span class="meta-k">Operator</span> <strong>{{ cfg.operator }}</strong></span>{% endif %}
     </div>
   </div>
 </div>
 
-<!-- Class KPIs -->
+<!-- Class KPI cards -->
 <div class="grid-4">
   {% for c in s.classes %}
   <div class="kpi accent-{{ c.class | lower }}">
@@ -61,7 +64,7 @@
 </div>
 
 <!-- Distribution bar -->
-<div class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:16px">
   <div class="panel-body">
     <div class="panel-section-label">Distribution</div>
     {% set total = s.total_skus %}
@@ -75,7 +78,7 @@
         {% endif %}
       {% endfor %}
     </div>
-    <div class="hint" style="margin-top:8px">
+    <div class="hint" style="margin-top:10px">
       {{ "{:,}".format(s.total_skus) }} SKUs total · {{ "{:,}".format(s.scorable_skus) }} scorable ·
       A ends at rank #{{ s.a_ends_at_rank }} · B ends at #{{ s.b_ends_at_rank }}
     </div>
@@ -87,51 +90,75 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">Pareto curve — scorable universe</div>
-      <div class="panel-sub">Cumulative volume and frequency by rank. Dotted line is uniform.</div>
+      <div class="panel-title">Pareto curve, scorable universe</div>
+      <div class="panel-sub">Cumulative volume and frequency by rank. Dotted line is the uniform-distribution baseline.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-2">
       <div class="chart-wrap">
-        <svg viewBox="0 0 520 280" style="width:100%;height:auto;display:block">
+        <svg viewBox="0 0 560 320" style="width:100%;height:auto;display:block" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="paretoFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stop-color="var(--brand-red)" stop-opacity="0.35"/>
+              <stop offset="1" stop-color="var(--brand-red)" stop-opacity="0.00"/>
+            </linearGradient>
+          </defs>
+
           <g class="grid">
-            <line x1="50" y1="40" x2="500" y2="40"/>
-            <line x1="50" y1="100" x2="500" y2="100"/>
-            <line x1="50" y1="160" x2="500" y2="160"/>
-            <line x1="50" y1="220" x2="500" y2="220"/>
+            <line x1="56" y1="40"  x2="540" y2="40"/>
+            <line x1="56" y1="110" x2="540" y2="110"/>
+            <line x1="56" y1="180" x2="540" y2="180"/>
+            <line x1="56" y1="250" x2="540" y2="250"/>
           </g>
+
           <g class="axis">
-            <line x1="50" y1="40" x2="50" y2="250"/>
-            <line x1="50" y1="250" x2="500" y2="250"/>
-            <text x="44" y="44" text-anchor="end">100%</text>
-            <text x="44" y="104" text-anchor="end">75</text>
-            <text x="44" y="164" text-anchor="end">50</text>
-            <text x="44" y="224" text-anchor="end">25</text>
-            <text x="44" y="254" text-anchor="end">0</text>
-            <text x="50" y="268" text-anchor="middle">0%</text>
-            <text x="275" y="268" text-anchor="middle">scorable SKUs (ranked)</text>
-            <text x="500" y="268" text-anchor="end">100%</text>
+            <line x1="56" y1="40" x2="56" y2="280"/>
+            <line x1="56" y1="280" x2="540" y2="280"/>
+            <text x="50" y="44"  text-anchor="end">100%</text>
+            <text x="50" y="114" text-anchor="end">75</text>
+            <text x="50" y="184" text-anchor="end">50</text>
+            <text x="50" y="254" text-anchor="end">25</text>
+            <text x="50" y="284" text-anchor="end">0</text>
+            <text x="56"  y="300" text-anchor="middle">0%</text>
+            <text x="298" y="300" text-anchor="middle">scorable SKUs (ranked)</text>
+            <text x="540" y="300" text-anchor="end">100%</text>
           </g>
-          {% set a_pos = 50 + (cfg.a_cutoff_pct * 4.5) %}
-          {% set b_pos = 50 + ((cfg.a_cutoff_pct + cfg.b_cutoff_pct) * 4.5) %}
-          <rect x="50" y="40" width="{{ a_pos - 50 }}" height="210" fill="var(--cls-a)" opacity="0.14"/>
-          <rect x="{{ a_pos }}" y="40" width="{{ b_pos - a_pos }}" height="210" fill="var(--cls-b)" opacity="0.14"/>
-          <rect x="{{ b_pos }}" y="40" width="{{ 500 - b_pos }}" height="210" fill="var(--cls-c)" opacity="0.10"/>
-          <line x1="{{ a_pos }}" y1="40" x2="{{ a_pos }}" y2="250" stroke="var(--cls-a)" stroke-width="1" stroke-dasharray="3 3"/>
-          <line x1="{{ b_pos }}" y1="40" x2="{{ b_pos }}" y2="250" stroke="var(--cls-b)" stroke-width="1" stroke-dasharray="3 3"/>
-          <text x="{{ a_pos + 4 }}" y="52" font-family="var(--font-mono)" font-size="10" fill="var(--cls-a)">A ends</text>
-          <text x="{{ b_pos + 4 }}" y="52" font-family="var(--font-mono)" font-size="10" fill="var(--cls-b)">B ends</text>
-          <line x1="50" y1="250" x2="500" y2="40" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="2 4"/>
-          <polyline points="50,250 {% for p in meta.pareto_scan %}{{ 50 + (p.top_pct * 4.5) }},{{ 250 - (p.cum_volume_pct * 2.1) }} {% endfor %}500,40"
-                    fill="none" stroke="var(--text-primary)" stroke-width="2.2"/>
-          <polyline points="50,250 {% for p in meta.pareto_scan %}{{ 50 + (p.top_pct * 4.5) }},{{ 250 - (p.cum_frequency_pct * 2.1) }} {% endfor %}500,40"
-                    fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="4 3"/>
+
+          {# Class bands #}
+          {% set a_pos = 56 + (cfg.a_cutoff_pct * 4.84) %}
+          {% set b_pos = 56 + ((cfg.a_cutoff_pct + cfg.b_cutoff_pct) * 4.84) %}
+          <rect x="56" y="40" width="{{ a_pos - 56 }}" height="240" fill="var(--cls-a)" opacity="0.10"/>
+          <rect x="{{ a_pos }}" y="40" width="{{ b_pos - a_pos }}" height="240" fill="var(--cls-b)" opacity="0.10"/>
+          <rect x="{{ b_pos }}" y="40" width="{{ 540 - b_pos }}" height="240" fill="var(--cls-c)" opacity="0.08"/>
+
+          <line x1="{{ a_pos }}" y1="40" x2="{{ a_pos }}" y2="280" stroke="var(--cls-a)" stroke-width="1" stroke-dasharray="4 3" opacity="0.8"/>
+          <line x1="{{ b_pos }}" y1="40" x2="{{ b_pos }}" y2="280" stroke="var(--cls-b)" stroke-width="1" stroke-dasharray="4 3" opacity="0.8"/>
+          <text x="{{ a_pos + 5 }}" y="54" font-family="var(--font-mono)" font-size="10" fill="var(--cls-a)" font-weight="700">A ends</text>
+          <text x="{{ b_pos + 5 }}" y="54" font-family="var(--font-mono)" font-size="10" fill="var(--cls-b)" font-weight="700">B ends</text>
+
+          {# Uniform baseline #}
+          <line x1="56" y1="280" x2="540" y2="40" stroke="var(--ink-muted)" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"/>
+
+          {# Area under volume curve #}
+          <polygon
+            points="56,280 {% for p in meta.pareto_scan %}{{ 56 + (p.top_pct * 4.84) }},{{ 280 - (p.cum_volume_pct * 2.4) }} {% endfor %}540,40 540,280"
+            fill="url(#paretoFill)"/>
+
+          {# Volume line #}
+          <polyline
+            points="56,280 {% for p in meta.pareto_scan %}{{ 56 + (p.top_pct * 4.84) }},{{ 280 - (p.cum_volume_pct * 2.4) }} {% endfor %}540,40"
+            fill="none" stroke="var(--brand-red)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+
+          {# Frequency line #}
+          <polyline
+            points="56,280 {% for p in meta.pareto_scan %}{{ 56 + (p.top_pct * 4.84) }},{{ 280 - (p.cum_frequency_pct * 2.4) }} {% endfor %}540,40"
+            fill="none" stroke="var(--brand-blue)" stroke-width="1.8" stroke-dasharray="5 3" stroke-linecap="round"/>
         </svg>
         <div class="legend">
-          <span class="legend-swatch"><i style="background:var(--text-primary)"></i>cumulative volume</span>
-          <span class="legend-swatch"><i style="background:var(--accent)"></i>cumulative frequency</span>
-          <span class="legend-swatch"><i style="background:var(--text-dim)"></i>uniform baseline</span>
+          <span class="legend-swatch"><i style="background:var(--brand-red)"></i>cumulative volume</span>
+          <span class="legend-swatch"><i style="background:var(--brand-blue)"></i>cumulative frequency</span>
+          <span class="legend-swatch"><i style="background:var(--ink-muted)"></i>uniform baseline</span>
         </div>
       </div>
 
@@ -153,7 +180,7 @@
         </div>
         {% if meta.pareto_scan|length > 1 %}
         <div class="alert ok" style="margin-top:12px">
-          <span class="ico">●</span>
+          <span class="ico">✓</span>
           <div>Top <strong>{{ meta.pareto_scan[1].top_pct }}%</strong> of scorable SKUs carry
             <strong>{{ meta.pareto_scan[1].cum_volume_pct }}%</strong> of volume. Headline for the deck.</div>
         </div>
@@ -166,15 +193,15 @@
 
 <!-- Quality checks -->
 <div class="panel">
-  <div class="panel-head"><div><div class="panel-title">Data quality checks</div><div class="panel-sub">Gates ran before scoring. Warnings don't block.</div></div></div>
+  <div class="panel-head"><div><div class="panel-title">Data quality checks</div><div class="panel-sub">Gates ran before scoring. Warnings do not block.</div></div></div>
   <div class="panel-body" style="padding:0">
     {% for c in meta.quality_checks %}
     <div class="qc-row">
-      <span class="qc-{{ c.severity if c.passed else ('block' if c.severity == 'block' else 'warn') }}">
+      <span class="qc-{{ 'pass' if c.passed else ('block' if c.severity == 'block' else 'warn') }}">
         {% if c.passed %}✓{% elif c.severity == 'block' %}×{% else %}!{% endif %}
       </span>
       <div>
-        <div style="font-weight:500">{{ c.name }}</div>
+        <div style="font-weight:600">{{ c.name }}</div>
         <div class="hint">{{ c.detail }}</div>
       </div>
       <code class="chip">{{ c.severity }}</code>
@@ -183,7 +210,7 @@
   </div>
 </div>
 
-<!-- Ground-truth validation (when existing ABC labels are in the data) -->
+<!-- Ground-truth validation -->
 {% if validation %}
 <div class="panel">
   <div class="panel-head">
@@ -191,7 +218,7 @@
       <div class="panel-title">ABC validation vs existing labels</div>
       <div class="panel-sub">
         SKU master carries a maintained ABC label (<code class="chip">velocity_declared</code>).
-        This panel compares our classification against it — no replacement, just agreement.
+        This panel compares our classification against it. No replacement, just agreement.
       </div>
     </div>
   </div>
@@ -208,13 +235,13 @@
         <div class="kpi-sub">
           across all labeled SKUs. Lower because
           {{ "{:,}".format(validation.fell_to_n.A + validation.fell_to_n.B + validation.fell_to_n.C) }}
-          labeled SKUs had zero window activity (can't rank zero-movement SKUs).
+          labeled SKUs had zero window activity (cannot rank zero-movement SKUs).
         </div>
       </div>
       <div class="kpi accent-b">
         <div class="kpi-label">Agreement · scorable only</div>
         <div class="kpi-value">{{ validation.agreement_scorable_pct }}%</div>
-        <div class="kpi-sub">{{ "{:,}".format(validation.total_labeled_scorable) }} SKUs with activity in window · apples-to-apples</div>
+        <div class="kpi-sub">{{ "{:,}".format(validation.total_labeled_scorable) }} SKUs with activity in window · apples to apples</div>
       </div>
       <div class="kpi accent-n">
         <div class="kpi-label">Labeled but fell to N</div>
@@ -223,9 +250,9 @@
       </div>
     </div>
 
-    <h3 style="margin-top:14px;margin-bottom:6px">Cross-tab</h3>
+    <div class="panel-section-label" style="margin-top:20px">Cross-tab</div>
     <div class="hint" style="margin-bottom:8px">Rows = existing label, columns = ours. Diagonal cells are exact matches.</div>
-    <div style="display:grid;grid-template-columns:70px repeat(4,1fr);gap:4px;max-width:720px">
+    <div style="display:grid;grid-template-columns:80px repeat(4,1fr);gap:4px;max-width:720px">
       <div class="matrix-cell hdr">existing \ ours</div>
       {% for col in ["A","B","C","N"] %}<div class="matrix-cell hdr">{{ col }}</div>{% endfor %}
       {% for row in ["A","B","C"] %}
@@ -233,14 +260,14 @@
         {% for col in ["A","B","C","N"] %}
           {% set v = validation.crosstab.get(row, {}).get(col, 0) %}
           <div class="matrix-cell {% if v > 0 and row == col %}strong{% endif %}">
-            <div style="font-size:16px;font-weight:600">{{ v }}</div>
+            <div style="font-size:16px;font-weight:700">{{ v }}</div>
           </div>
         {% endfor %}
       {% endfor %}
     </div>
 
     {% if validation.disagreement_sample %}
-    <h3 style="margin-top:16px">Disagreement sample · {{ validation.disagreement_sample | length }} rows</h3>
+    <div class="panel-section-label" style="margin-top:20px">Disagreement sample · {{ validation.disagreement_sample | length }} rows</div>
     <div class="table-wrap">
       <table class="data">
         <thead>
@@ -265,16 +292,16 @@
   </div>
 </div>
 
-<!-- Stale labels — inventory-hygiene finding -->
+<!-- Stale labels -->
 {% set stale_total = validation.fell_to_n.A + validation.fell_to_n.B + validation.fell_to_n.C %}
 {% if stale_total > 0 %}
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">Stale labels — inventory-hygiene finding</div>
+      <div class="panel-title">Stale labels, inventory-hygiene finding</div>
       <div class="panel-sub">
         SKUs the client tagged as A / B / C but which had zero picks in the {{ cfg.historical_window_days }}-day window.
-        These aren't a classification disagreement — the SKUs just didn't move. Worth flagging to the client's data / inventory team.
+        These are not a classification disagreement, the SKUs just did not move. Worth flagging to the client's data / inventory team.
       </div>
     </div>
   </div>
@@ -284,7 +311,7 @@
       <span class="ico">!</span>
       <div>
         <strong>{{ validation.stale_pct.A }}% of SKUs labeled A had zero picks in {{ cfg.historical_window_days }} days.</strong>
-        This is the headline number for the client conversation. A-class is fast-movers; a third of them sitting idle
+        This is the headline number for the client conversation. A-class is fast-movers, a third of them sitting idle
         suggests labels are being set and not maintained.
       </div>
     </div>
@@ -294,26 +321,17 @@
       <div class="kpi accent-a">
         <div class="kpi-label">Labeled A · zero activity</div>
         <div class="kpi-value">{{ validation.fell_to_n.A }}</div>
-        <div class="kpi-sub">
-          of {{ validation.label_totals.A }} A SKUs
-          · <strong>{{ validation.stale_pct.A }}%</strong> stale
-        </div>
+        <div class="kpi-sub">of {{ validation.label_totals.A }} A SKUs · <strong>{{ validation.stale_pct.A }}%</strong> stale</div>
       </div>
       <div class="kpi accent-b">
         <div class="kpi-label">Labeled B · zero activity</div>
         <div class="kpi-value">{{ validation.fell_to_n.B }}</div>
-        <div class="kpi-sub">
-          of {{ validation.label_totals.B }} B SKUs
-          · <strong>{{ validation.stale_pct.B }}%</strong> stale
-        </div>
+        <div class="kpi-sub">of {{ validation.label_totals.B }} B SKUs · <strong>{{ validation.stale_pct.B }}%</strong> stale</div>
       </div>
       <div class="kpi accent-c">
         <div class="kpi-label">Labeled C · zero activity</div>
         <div class="kpi-value">{{ validation.fell_to_n.C }}</div>
-        <div class="kpi-sub">
-          of {{ validation.label_totals.C }} C SKUs
-          · <strong>{{ validation.stale_pct.C }}%</strong> stale
-        </div>
+        <div class="kpi-sub">of {{ validation.label_totals.C }} C SKUs · <strong>{{ validation.stale_pct.C }}%</strong> stale</div>
       </div>
     </div>
 
@@ -366,7 +384,7 @@
 <div class="panel" id="derivatives">
   <div class="panel-head">
     <div>
-      <div class="panel-title">New-SKU → parent suggestions <span class="chip">{{ suggestions | length }}</span></div>
+      <div class="panel-title">New-SKU to parent suggestions <span class="chip">{{ suggestions | length }}</span></div>
       <div class="panel-sub">No-history SKUs auto-matched against scorable SKUs by code / description similarity. Confirm, re-pick, or leave blank.</div>
     </div>
   </div>
@@ -393,7 +411,7 @@
           {% endfor %}
           <label class="deriv-candidate-pick">
             <input type="radio" name="deriv[{{ s.child_sku }}][parent_sku]" value="">
-            <span>Leave blank · don't link</span>
+            <span>Leave blank, do not link</span>
           </label>
         </div>
         <div class="deriv-type-select">
@@ -438,5 +456,67 @@
   </div>
 </div>
 {% endif %}
+
+<style>
+/* Run hero, scoped to results page */
+.run-hero {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(238,49,36,0.16), transparent 55%),
+    linear-gradient(135deg, var(--surface-raised) 0%, var(--surface-sunken) 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--sp-5) var(--sp-6) var(--sp-5) calc(var(--sp-6) + 6px);
+  margin-bottom: var(--sp-5);
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 4px 0 0 var(--brand-red), var(--shadow-sm);
+}
+.run-hero-crumb {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
+}
+.run-hero-id {
+  font-family: var(--font-mono);
+  color: var(--ink-primary);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  padding: 2px 8px;
+  background: var(--surface-sunken);
+  border-radius: var(--r-sm);
+}
+.run-hero-title {
+  font-size: var(--fs-28);
+  letter-spacing: -1px;
+  margin-bottom: var(--sp-3);
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.run-hero-wh {
+  color: var(--ink-secondary);
+  font-weight: 500;
+  font-size: var(--fs-18);
+  letter-spacing: -0.3px;
+}
+.run-hero-meta {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  font-size: var(--fs-13);
+  color: var(--ink-primary);
+}
+.run-hero-meta .meta-k {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: var(--fs-11);
+  color: var(--ink-secondary);
+  font-weight: 700;
+  margin-right: 4px;
+}
+</style>
 
 {% endblock %}

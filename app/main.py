@@ -30,10 +30,14 @@ from fastapi.templating import Jinja2Templates
 
 from . import __version__, db
 from .classifier import classify
-from .config import RunConfig, PRESETS
+from .config import RunConfig, PRESETS, OrderProfileConfig
 from .derivatives import suggest_parents
 from .loaders import load_order_lines, load_sku_master, load_stock_on_hand, load_forecast
-from .storage import new_run_id, save_run, load_run, export_xlsx_path
+from .order_profile import profile as order_profile
+from .storage import (
+    new_run_id, save_run, load_run, export_xlsx_path,
+    save_latest_profile, load_latest_profile, clear_latest_profile,
+)
 from .validation import compute_validation
 from .validators import run_quality_checks, is_blocking
 
@@ -129,6 +133,111 @@ def dashboard_compare(request: Request, run_a: str, run_b: str):
         request=request,
         name="dashboard.html",
         context={"c": bundle, "version": __version__},
+    )
+
+
+@app.get("/order-profile", response_class=HTMLResponse)
+def order_profile_page(request: Request, fresh: bool = False):
+    """Pre-analytics tab (sub-tab of Setup).
+
+    On GET we hydrate from the latest-run cache so switching sidebar tabs or
+    refreshing the page preserves the result. Pass ?fresh=1 to force the
+    empty-form view (used by the 'Clear' action)."""
+    cached = None if fresh else load_latest_profile()
+    if cached:
+        return templates.TemplateResponse(
+            request=request,
+            name="order_profile.html",
+            context={
+                "defaults": cached["op_config"],
+                "result": cached["result"],
+                "window_days": cached["window_days"],
+                "cached_at": cached.get("saved_at"),
+                "version": __version__,
+            },
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="order_profile.html",
+        context={
+            "defaults": OrderProfileConfig(),
+            "result": None,
+            "version": __version__,
+        },
+    )
+
+
+@app.post("/order-profile/clear")
+def order_profile_clear():
+    """Drop the cached latest-run and return the user to an empty form."""
+    clear_latest_profile()
+    return RedirectResponse(url="/order-profile?fresh=1", status_code=303)
+
+
+@app.post("/order-profile", response_class=HTMLResponse)
+async def order_profile_run(
+    request: Request,
+    order_lines_file: Annotated[UploadFile, File()],
+    sku_master_file: Annotated[UploadFile, File()],
+    stock_on_hand_file: Annotated[UploadFile | None, File()] = None,
+    window_days: Annotated[int, Form()] = 90,
+    top_n_skus: Annotated[int, Form()] = 100,
+    bin_equivalent_mode: Annotated[bool, Form()] = False,
+    fms_cut_f_plus: Annotated[float, Form()] = 0.60,
+    fms_cut_f: Annotated[float, Form()] = 0.80,
+    fms_cut_m: Annotated[float, Form()] = 0.95,
+    doh_target_a_plus: Annotated[float, Form()] = 6.0,
+    doh_target_a: Annotated[float, Form()] = 8.0,
+    doh_target_b: Annotated[float, Form()] = 15.0,
+    doh_target_c: Annotated[float, Form()] = 20.0,
+    doi_alert_multiplier: Annotated[float, Form()] = 1.5,
+):
+    # Input validation
+    if not (0 < fms_cut_f_plus < fms_cut_f < fms_cut_m < 1.0):
+        raise HTTPException(400, "FMS cuts must be strictly increasing between 0 and 1 (F+ < F < M < 1).")
+    if top_n_skus not in (25, 50, 100, 200):
+        raise HTTPException(400, "top_n_skus must be one of 25, 50, 100, 200.")
+
+    try:
+        ol = load_order_lines(await order_lines_file.read(), order_lines_file.filename)
+        sm = load_sku_master(await sku_master_file.read(), sku_master_file.filename)
+        soh = None
+        if stock_on_hand_file is not None and stock_on_hand_file.filename:
+            soh = load_stock_on_hand(await stock_on_hand_file.read(), stock_on_hand_file.filename)
+    except ValueError as e:
+        raise HTTPException(400, f"Load error: {e}")
+
+    op_config = OrderProfileConfig(
+        fms_cut_f_plus=fms_cut_f_plus,
+        fms_cut_f=fms_cut_f,
+        fms_cut_m=fms_cut_m,
+        doh_target_a_plus=doh_target_a_plus,
+        doh_target_a=doh_target_a,
+        doh_target_b=doh_target_b,
+        doh_target_c=doh_target_c,
+        top_n_skus=top_n_skus,
+        bin_equivalent_mode=bin_equivalent_mode,
+        doi_alert_multiplier=doi_alert_multiplier,
+    )
+
+    result = order_profile(ol, sm, soh, window_days=window_days, op_config=op_config)
+
+    # Persist as the single latest-slot so nav away + back keeps the result.
+    try:
+        save_latest_profile(result, op_config, window_days)
+    except Exception:
+        # Cache failures must not break the response; log-and-continue.
+        pass
+
+    return templates.TemplateResponse(
+        request=request,
+        name="order_profile.html",
+        context={
+            "defaults": op_config,
+            "result": result,
+            "window_days": window_days,
+            "version": __version__,
+        },
     )
 
 
@@ -321,6 +430,63 @@ def export_xlsx(run_id: str):
 @app.get("/health")
 def health():
     return {"status": "ok", "version": __version__, "time": datetime.now(timezone.utc).isoformat()}
+
+
+# ---------- preview quality (non-destructive, drives the inline upload panel) ----------
+
+@app.post("/api/preview-check")
+async def preview_check(
+    order_lines_file: Annotated[UploadFile, File()],
+    sku_master_file: Annotated[UploadFile, File()],
+    stock_on_hand_file: Annotated[UploadFile | None, File()] = None,
+):
+    """Non-destructive data-quality preview.
+
+    Runs the same quality gates that /classify runs, without saving anything.
+    Powers the inline validation panel on the New classification page so the
+    user sees whether their files pass before they click Run.
+    """
+    result: dict = {"files": {}, "checks": [], "blocking": False, "error": None}
+
+    # File-level signals first - useful even if row-level checks fail later.
+    for key, f in [("order_lines", order_lines_file),
+                   ("sku_master",  sku_master_file),
+                   ("stock_on_hand", stock_on_hand_file)]:
+        if f is None or not f.filename:
+            result["files"][key] = None
+            continue
+        raw = await f.read()
+        result["files"][key] = {"name": f.filename, "size_bytes": len(raw)}
+        # Keep bytes around for the row-level pass
+        f.file.seek(0)
+        f._cached = raw  # type: ignore[attr-defined]
+
+    try:
+        ol = load_order_lines(order_lines_file._cached, order_lines_file.filename)  # type: ignore[attr-defined]
+        sm = load_sku_master(sku_master_file._cached, sku_master_file.filename)     # type: ignore[attr-defined]
+        soh = _empty_df()
+        if stock_on_hand_file is not None and stock_on_hand_file.filename:
+            soh = load_stock_on_hand(stock_on_hand_file._cached, stock_on_hand_file.filename)  # type: ignore[attr-defined]
+    except ValueError as e:
+        result["error"] = f"Could not load files: {e}"
+        return JSONResponse(result, status_code=200)
+    except Exception as e:
+        result["error"] = f"Unexpected error reading files: {type(e).__name__}: {e}"
+        return JSONResponse(result, status_code=200)
+
+    # Row count signals back into the file blocks so the UI can show rows read.
+    result["files"]["order_lines"] = dict(result["files"]["order_lines"] or {}, rows=int(len(ol)))
+    result["files"]["sku_master"]  = dict(result["files"]["sku_master"]  or {}, rows=int(len(sm)))
+    if result["files"].get("stock_on_hand"):
+        result["files"]["stock_on_hand"] = dict(result["files"]["stock_on_hand"], rows=int(len(soh)))
+
+    checks = run_quality_checks(ol, sm, soh)
+    result["checks"] = [
+        {"name": c.name, "severity": c.severity, "passed": c.passed, "detail": c.detail}
+        for c in checks
+    ]
+    result["blocking"] = is_blocking(checks)
+    return result
 
 
 def _empty_df():

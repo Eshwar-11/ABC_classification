@@ -1,115 +1,225 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-mode="simple">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>{% block title %}Addverb ABC Classifier{% endblock %}</title>
+<title>{% block title %}{% block page_title %}{% endblock %} · Addverb{% endblock %}</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+
 <script>
-  (function(){
+  /* Theme + mode + sidebar-collapse state restored before first paint to avoid flash. */
+  (function () {
     try {
-      const saved = localStorage.getItem('abc-theme');
-      if (saved === 'light' || saved === 'dark') {
-        document.documentElement.setAttribute('data-theme', saved);
+      const theme = localStorage.getItem('abc-theme');
+      if (theme === 'light' || theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
       }
-    } catch(e){}
+      const mode = localStorage.getItem('abc-mode');
+      if (mode === 'simple' || mode === 'analytics') {
+        document.documentElement.setAttribute('data-mode', mode);
+      }
+    } catch (e) {}
   })();
 </script>
 </head>
 <body>
 
-<div class="app">
+<div class="app" id="app">
 
-  <!-- ========== Vertical sidebar ========== -->
+  <!-- =====================================================
+       SIDEBAR
+       ===================================================== -->
   <aside class="sidebar">
-    <div class="side-brand">
-      <div class="side-brand-mark">A</div>
-      <div class="side-brand-text">
-        <span class="side-brand-name">Addverb</span>
-        <span class="side-brand-product">Classify</span>
-      </div>
-    </div>
 
-    <div class="side-section-title">Workspace</div>
-
-    <a href="/" class="side-item {% if request.url.path == '/' %}active{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
-      <span class="side-label">New classification</span>
+    <a href="/" class="brand" aria-label="Addverb home">
+      <span class="brand-img" role="img" aria-label="Addverb"></span>
     </a>
 
-    <a href="/runs" class="side-item {% if request.url.path == '/runs' %}active{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg>
-      <span class="side-label">All runs</span>
+    <a href="/" class="nav-item {% if request.url.path == '/' %}active{% endif %}" data-label="New classification">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
+      <span class="nav-label">New classification</span>
     </a>
 
-    <a href="/dashboard" class="side-item {% if request.url.path.startswith('/dashboard') %}active{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12l4-4 4 4 4-6 6 10"/><path d="M3 20h18"/></svg>
-      <span class="side-label">Changes</span>
+    {# Analytics-only: Order profile, Changes #}
+    <a href="/order-profile" class="nav-item analytics-only {% if request.url.path == '/order-profile' %}active{% endif %}" data-label="Order profile">
+      <svg viewBox="0 0 24 24"><path d="M21 8.5L12 3 3 8.5V16l9 5 9-5V8.5z"/><path d="M3 8.5L12 14l9-5.5"/><path d="M12 14v7"/><path d="M7.5 5.75L16.5 11.25"/></svg>
+      <span class="nav-label">Order profile</span>
     </a>
 
-    <div class="side-section-title">Reference</div>
-
-    <a href="/docs/logic" class="side-item {% if request.url.path == '/docs/logic' %}active{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h12a4 4 0 014 4v12H8a4 4 0 01-4-4V4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-      <span class="side-label">Methodology</span>
+    <a href="/dashboard" class="nav-item {% if request.url.path.startswith('/dashboard') %}active{% endif %}" data-label="Compare runs">
+      <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 4v5h-5"/><path d="M3 12a9 9 0 003 6.7"/><path d="M3 20v-5h5"/></svg>
+      <span class="nav-label">Compare runs</span>
     </a>
 
-    <a href="/docs" class="side-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h3M16 3h3a2 2 0 012 2v14a2 2 0 01-2 2h-3"/><path d="M10 8l-2 4 2 4M14 8l2 4-2 4"/></svg>
-      <span class="side-label">API reference</span>
+    <div class="nav-group">Help</div>
+
+    <a href="/docs/logic" class="nav-item {% if request.url.path == '/docs/logic' %}active{% endif %}" data-label="How it works">
+      <svg viewBox="0 0 24 24"><path d="M2 4a2 2 0 012-2h6a2 2 0 012 2v16a2 2 0 00-2-2H2V4z"/><path d="M22 4a2 2 0 00-2-2h-6a2 2 0 00-2 2v16a2 2 0 012-2h6V4z"/></svg>
+      <span class="nav-label">How it works</span>
     </a>
 
-    <div class="side-spacer"></div>
+    <a href="/docs" class="nav-item" data-label="API reference">
+      <svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5"/><path d="M15 7l5 5-5 5"/><path d="M14 4l-4 16"/></svg>
+      <span class="nav-label">API reference</span>
+    </a>
 
-    <div class="side-footer">
-      <div class="side-user">
-        <div class="side-user-avatar">E</div>
-        <div class="side-user-detail">
-          <div class="side-user-name">Operator</div>
-          <div class="side-user-role">Admin · local</div>
-        </div>
-      </div>
-
-      <button class="theme-toggle" onclick="toggleTheme()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span class="side-label">Theme</span>
+    <div class="sidebar-footer">
+      <span class="user" title="Operator">eshwar@addverb</span>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+        <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
-
-      <div class="side-version">v{{ version }}</div>
+      <button class="collapse-btn" onclick="toggleCollapse()" title="Collapse sidebar" aria-label="Toggle sidebar">
+        <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
     </div>
   </aside>
 
-  <!-- ========== Main pane ========== -->
-  <div class="main">
-    <header class="main-header">
-      <div class="main-crumbs">
-        {% block crumbs %}
-          <strong>{% block page_title %}Workspace{% endblock %}</strong>
-        {% endblock %}
-      </div>
-      <div class="spacer"></div>
-      <span class="pill"><span class="dot"></span>Local</span>
-      <span class="pill" title="SQLite backing store"><span class="dot" style="background:var(--info); box-shadow:0 0 0 3px rgba(79,184,233,0.14)"></span>SQLite</span>
-    </header>
+  <!-- =====================================================
+       MAIN
+       ===================================================== -->
+  <main class="main">
 
-    <main class="main-body">
+    <div class="topbar">
+      <div class="topbar-title">{% block topbar_title %}{{ self.page_title() }}{% endblock %}</div>
+
+      <div class="topbar-actions">
+        {% block topbar_actions %}{% endblock %}
+
+        <div class="topbar-divider" aria-hidden="true"></div>
+
+        <!-- Past runs dropdown -->
+        <div class="dropdown" id="pastRunsDd">
+          <button class="btn sm dropdown-btn" onclick="togglePastRuns()" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            Past runs
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="dropdown-menu" id="pastRunsMenu" role="menu">
+            <div class="dropdown-head">
+              <span>Recent runs</span>
+              <a href="/runs" class="dropdown-all">See all →</a>
+            </div>
+            <div class="dropdown-body" id="pastRunsBody">
+              <div class="dropdown-empty">Loading…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode toggle -->
+        <div class="mode-toggle" role="group" aria-label="View mode">
+          <button type="button" class="mode-opt" data-mode-opt="simple" onclick="setMode('simple')">Simple</button>
+          <button type="button" class="mode-opt" data-mode-opt="analytics" onclick="setMode('analytics')">Analytics</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
       {% block content %}{% endblock %}
-    </main>
-  </div>
+    </div>
+
+  </main>
 
 </div>
 
 <script>
+  /* Theme */
   function toggleTheme() {
     const r = document.documentElement;
-    const cur = r.getAttribute('data-theme');
+    const cur = r.getAttribute('data-theme') || 'dark';
     const next = cur === 'dark' ? 'light' : 'dark';
     r.setAttribute('data-theme', next);
     try { localStorage.setItem('abc-theme', next); } catch (e) {}
   }
+
+  /* Sidebar collapse */
+  function toggleCollapse() {
+    const app = document.getElementById('app');
+    const now = app.getAttribute('data-collapsed') === 'true';
+    const next = !now;
+    app.setAttribute('data-collapsed', next ? 'true' : 'false');
+    try { localStorage.setItem('abc-sidebar-collapsed', next ? '1' : '0'); } catch (e) {}
+  }
+
+  /* View mode (Simple | Analytics) */
+  function setMode(mode) {
+    if (mode !== 'simple' && mode !== 'analytics') return;
+    document.documentElement.setAttribute('data-mode', mode);
+    try { localStorage.setItem('abc-mode', mode); } catch (e) {}
+    document.querySelectorAll('.mode-opt').forEach(el => {
+      el.classList.toggle('active', el.dataset.modeOpt === mode);
+    });
+    document.dispatchEvent(new CustomEvent('abc-mode-change', { detail: { mode } }));
+  }
+
+  /* Past runs dropdown */
+  let _pastRunsLoaded = false;
+  function togglePastRuns() {
+    const dd = document.getElementById('pastRunsDd');
+    const btn = dd.querySelector('.dropdown-btn');
+    const open = dd.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && !_pastRunsLoaded) loadPastRuns();
+  }
+
+  async function loadPastRuns() {
+    const body = document.getElementById('pastRunsBody');
+    try {
+      const r = await fetch('/api/runs?limit=10');
+      const runs = await r.json();
+      if (!runs || runs.length === 0) {
+        body.innerHTML = '<div class="dropdown-empty">No runs yet. Upload files to get started.</div>';
+      } else {
+        body.innerHTML = runs.map(r => `
+          <a href="/runs/${r.run_id}" class="dropdown-row">
+            <div class="dr-main">
+              <div class="dr-title">${escapeHTML(r.client_name || 'Untitled')}</div>
+              <div class="dr-meta">${escapeHTML(r.warehouse_code || '—')} · ${escapeHTML(r.basis || '')}</div>
+            </div>
+            <div class="dr-side">
+              <span class="status-pill ${escapeHTML(r.status)}">${escapeHTML(r.status)}</span>
+              <div class="dr-date">${escapeHTML((r.created_at || '').slice(0, 10))}</div>
+            </div>
+          </a>
+        `).join('');
+      }
+      _pastRunsLoaded = true;
+    } catch (e) {
+      body.innerHTML = '<div class="dropdown-empty">Could not load runs.</div>';
+    }
+  }
+
+  function escapeHTML(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+  }
+
+  document.addEventListener('click', (e) => {
+    const dd = document.getElementById('pastRunsDd');
+    if (dd && dd.classList.contains('open') && !dd.contains(e.target)) {
+      dd.classList.remove('open');
+      dd.querySelector('.dropdown-btn').setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  /* Hydrate on load */
+  (function hydrate() {
+    try {
+      if (localStorage.getItem('abc-sidebar-collapsed') === '1') {
+        document.getElementById('app').setAttribute('data-collapsed', 'true');
+      }
+    } catch (e) {}
+    const mode = document.documentElement.getAttribute('data-mode') || 'simple';
+    document.querySelectorAll('.mode-opt').forEach(el => {
+      el.classList.toggle('active', el.dataset.modeOpt === mode);
+    });
+  })();
 </script>
 {% block scripts %}{% endblock %}
 </body>

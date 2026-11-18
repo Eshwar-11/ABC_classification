@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block page_title %}All runs{% endblock %}
+{% block topbar_actions %}
+  <a class="btn sm" href="/dashboard">Compare runs</a>
+  <a class="btn primary sm" href="/">+ New run</a>
+{% endblock %}
 {% block content %}
 
 <div class="page-head">
@@ -7,41 +11,46 @@
     <h1>All runs</h1>
     <div class="sub">Every classification bundled with its config and metrics. Persisted locally.</div>
   </div>
-  <div style="display:flex;gap:8px">
-    <a class="btn" href="/dashboard">Compare runs</a>
-    <a class="btn primary" href="/">+ New run</a>
-  </div>
 </div>
 
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">Run history</div>
+      <div class="panel-title">Run history <span class="chip">{{ runs | length }} total</span></div>
       <div class="panel-sub">Newest first. Click Open to review, approve or discard.</div>
     </div>
   </div>
-  <div class="panel-body">
+  <div class="panel-body" style="padding: 0">
     {% if not runs %}
-      <div class="alert info"><span class="ico">i</span><div>No runs yet. Start one on the <a href="/">New run</a> page.</div></div>
+      <div style="padding: var(--sp-6)">
+        <div class="alert info">
+          <span class="ico">i</span>
+          <div>No runs yet. Start one on the <a href="/">New run</a> page.</div>
+        </div>
+      </div>
     {% else %}
-    <div class="table-wrap">
+    <div class="table-wrap" style="border: none; border-radius: 0">
       <table class="data">
         <thead>
-          <tr><th>Run</th><th>Status</th><th>Client</th><th>Warehouse</th><th>Basis</th><th>Universe</th><th>Scorable</th><th>Operator</th><th>Created</th><th></th></tr>
+          <tr>
+            <th>Run</th><th>Status</th><th>Client</th><th>Warehouse</th>
+            <th>Basis</th><th class="num">Universe</th><th class="num">Scorable</th>
+            <th>Operator</th><th>Created</th><th></th>
+          </tr>
         </thead>
         <tbody>
           {% for r in runs %}
           <tr>
-            <td class="num">{{ r.run_id }}</td>
+            <td class="num" style="font-weight: 600">{{ r.run_id }}</td>
             <td><span class="status-pill {{ r.status }}">{{ r.status }}</span></td>
-            <td>{{ r.client_name or "—" }}</td>
+            <td style="font-weight: 500">{{ r.client_name or "—" }}</td>
             <td>{{ r.warehouse_code or "—" }}</td>
-            <td>{{ r.basis }}</td>
-            <td class="num">{{ r.universe_size }}</td>
-            <td class="num">{{ r.scorable_size }}</td>
+            <td><code class="chip">{{ r.basis }}</code></td>
+            <td class="num">{{ "{:,}".format(r.universe_size) }}</td>
+            <td class="num">{{ "{:,}".format(r.scorable_size) }}</td>
             <td>{{ r.operator or "—" }}</td>
-            <td class="num">{{ r.created_at[:19] }}</td>
-            <td style="white-space:nowrap">
+            <td class="num" style="color: var(--ink-secondary)">{{ r.created_at[:19] }}</td>
+            <td style="white-space:nowrap; text-align: right">
               <a class="btn sm" href="/runs/{{ r.run_id }}">Open</a>
               <a class="btn sm" href="/runs/{{ r.run_id }}/export.xlsx">Excel</a>
             </td>

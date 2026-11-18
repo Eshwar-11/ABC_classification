@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+{% block page_title %}Order profile{% endblock %}
+{% block topbar_actions %}
+  <a class="btn sm" href="/">New classification</a>
+  <a class="btn sm" href="/runs">All runs</a>
+{% endblock %}
+{% block content %}
+
+{# Heatmap macro #}
+{% macro heatmap_table(data, rows, cols) %}
+  {% set r_list = data[rows] %}
+  {% set c_list = data[cols] %}
+  {% set lookup = data.lookup %}
+  {% set max_v  = data.max_v or 0 %}
+  {% if r_list and c_list and lookup %}
+    <div class="op-heatmap">
+      <table>
+        <thead>
+          <tr><th class="corner"></th>{% for c in c_list %}<th class="col-head">{{ c }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for r in r_list %}
+          <tr>
+            <th class="row-head">{{ r }}</th>
+            {% for c in c_list %}
+              {% set v = lookup.get(r, {}).get(c, 0) %}
+              {% set step = ((v / max_v * 8) | round(0, 'floor') | int) if (max_v and v) else 0 %}
+              <td class="{% if not v %}cell-0{% endif %}"
+                  style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#fff{% else %}var(--ink-secondary){% endif %};"
+                  title="{{ r }} · {{ c }} = {{ v }}">
+                {% if v %}{{ v }}{% else %}·{% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="hint">Empty.</div>
+  {% endif %}
+{% endmacro %}
+
+
+<div class="page-head">
+  <div>
+    <div class="breadcrumb">
+      <a href="/">Setup</a> <span class="sep">›</span> <span>Order profile</span>
+    </div>
+    <h1>
+      Order profile
+      <span class="chip brand">pre-analytics</span>
+      {% if cached_at %}
+        <span class="chip info">cached · {{ cached_at.strftime('%b %d · %H:%M UTC') }}</span>
+      {% endif %}
+    </h1>
+    <div class="sub">
+      Visibility of order mix, SKU cadence, and inventory posture before running classification.
+      FMS axis is display only, the classifier assigns one ABC class per SKU.
+      {% if cached_at %}
+        <br><span style="font-size:12px;color:var(--ink-muted)">
+          Restored from the last run. Upload new files to recompute, or
+          <a href="#" onclick="document.getElementById('clearForm').submit();return false;">clear the cache</a>.
+        </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if cached_at %}<form id="clearForm" method="post" action="/order-profile/clear" style="display:none"></form>{% endif %}
+
+
+{% if result %}
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Window snapshot</div>
+      <div class="panel-sub">What the engine saw after it ingested the files. Red flags up front, before any analysis.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="diag-bar">
+      <div class="diag-cell">
+        <div class="diag-k">Window</div>
+        <div class="diag-v">{{ result.window_start }} → {{ result.window_end }}</div>
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Orderlines</div>
+        <div class="diag-v">{{ "{:,}".format(result.rollup_output_rows) }}</div>
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Roll-up</div>
+        {% if result.rollup_applied_rows > 0 %}
+          <div class="diag-v warn">{{ "{:,}".format(result.rollup_applied_rows) }} rows collapsed · tote grain</div>
+        {% else %}
+          <div class="diag-v ok">No-op · orderline grain</div>
+        {% endif %}
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Null order_id</div>
+        <div class="diag-v">{{ "{:,}".format(result.null_order_rows) }}</div>
+      </div>
+      <div class="diag-cell">
+        <div class="diag-k">Vol measure</div>
+        <div class="diag-v">{{ result.tiles.vol_label|capitalize }}</div>
+      </div>
+    </div>
+
+    {% set has_notes = (not result.bin_equivalent_available)
+                    or (result.sku_count_missing_bin > 0)
+                    or (not result.hour_of_day_available)
+                    or (not result.category_available) %}
+    {% if has_notes %}
+    <div style="display:grid;gap:var(--sp-2);margin-top:var(--sp-4)">
+      {% if not result.bin_equivalent_available %}
+        <div class="op-banner">Bin-equivalent toggle needs <code>sku_per_bin</code> on sku_master. Panels fall back to product-dimension values.</div>
+      {% elif result.sku_count_missing_bin > 0 %}
+        <div class="op-banner info"><code>sku_per_bin</code> missing on {{ result.sku_count_missing_bin }} SKUs; those SKUs excluded from bin-equivalent panels.</div>
+      {% endif %}
+      {% if not result.hour_of_day_available %}
+        <div class="op-banner">Timestamp granularity: date only. SKU × hour-of-day panel inactive on this source.</div>
+      {% endif %}
+      {% if not result.category_available %}
+        <div class="op-banner"><code>material_category</code> not on sku_master. Category × week panel inactive.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+
+<!-- Upload + Controls -->
+<form method="post" action="/order-profile" enctype="multipart/form-data" id="profileForm">
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title"><span class="step-num">1</span> Upload data</div>
+      <div class="panel-sub">Same files as a classification run. stock_on_hand is optional but unlocks the DOI panel.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="grid-3">
+      <div>
+        <div class="field">order_lines <span style="color:var(--danger)">*</span></div>
+        <div class="filedrop" data-fd="ol">
+          <div class="fd-label">Drop file or click to select</div>
+          <div class="fd-hint">sku_code, pick_date, qty_shipped, n_tasks</div>
+          <div class="filename" data-fn></div>
+          <input type="file" name="order_lines_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
+        </div>
+      </div>
+      <div>
+        <div class="field">sku_master <span style="color:var(--danger)">*</span></div>
+        <div class="filedrop" data-fd="sm">
+          <div class="fd-label">Drop file or click to select</div>
+          <div class="fd-hint">Optional: material_category, sku_per_bin (enables bin-eq. + category panel)</div>
+          <div class="filename" data-fn></div>
+          <input type="file" name="sku_master_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
+        </div>
+      </div>
+      <div>
+        <div class="field">stock_on_hand (optional)</div>
+        <div class="filedrop" data-fd="so">
+          <div class="fd-label">Drop file or click to select</div>
+          <div class="fd-hint">sku_code, qty_on_hand</div>
+          <div class="filename" data-fn></div>
+          <input type="file" name="stock_on_hand_file" accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title"><span class="step-num">2</span> Controls</div>
+      <div class="panel-sub">FMS cuts and DOH targets are Admin-configurable in production (site_config). Here they are per run.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+
+    <div class="grid-2" style="margin-bottom: var(--sp-4)">
+      <div>
+        <label class="field">Window (days)</label>
+        <input type="number" name="window_days" value="{{ window_days or 90 }}" min="7" max="730">
+      </div>
+      <div>
+        <label class="field">Volume measure (global)</label>
+        <div style="display:flex; gap:var(--sp-4); margin-top:6px; align-items:center">
+          <label style="display:flex; gap:6px; align-items:center; cursor:pointer">
+            <input type="radio" name="bin_equivalent_mode" value="false" {% if not defaults.bin_equivalent_mode %}checked{% endif %}>
+            Product dimension (units)
+          </label>
+          <label style="display:flex; gap:6px; align-items:center; cursor:pointer">
+            <input type="radio" name="bin_equivalent_mode" value="true"  {% if defaults.bin_equivalent_mode %}checked{% endif %}>
+            Bin equivalent (units / sku_per_bin)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <label class="field">Heatmap top-N SKUs</label>
+    <div class="segmented" style="margin-bottom: var(--sp-3)">
+      {% for n in [25, 50, 100, 200] %}
+        <input type="radio" name="top_n_skus" id="topn-{{ n }}" value="{{ n }}" {% if n == defaults.top_n_skus %}checked{% endif %} style="position:absolute;opacity:0">
+        <label for="topn-{{ n }}">{{ n }}</label>
+      {% endfor %}
+    </div>
+
+    <div class="section-divider"></div>
+    <label class="field">
+      FMS cuts
+      <span class="fms-chip">display only, not an applied class</span>
+    </label>
+    <div class="op-controls">
+      <div><label>F+ cumulative line share ≤</label>
+        <input type="number" name="fms_cut_f_plus" step="0.01" min="0.01" max="0.99" value="{{ '%.2f' % defaults.fms_cut_f_plus }}"></div>
+      <div><label>F cumulative line share ≤</label>
+        <input type="number" name="fms_cut_f" step="0.01" min="0.01" max="0.99" value="{{ '%.2f' % defaults.fms_cut_f }}"></div>
+      <div><label>M cumulative line share ≤</label>
+        <input type="number" name="fms_cut_m" step="0.01" min="0.01" max="0.99" value="{{ '%.2f' % defaults.fms_cut_m }}"></div>
+      <div><label>S remainder</label>
+        <input type="text" value="rest" disabled></div>
+    </div>
+
+    <div class="section-divider"></div>
+    <label class="field">DOH targets per class (days)</label>
+    <div class="op-controls">
+      <div><label>A+</label><input type="number" name="doh_target_a_plus" step="0.5" min="1" value="{{ defaults.doh_target_a_plus }}"></div>
+      <div><label>A</label> <input type="number" name="doh_target_a"      step="0.5" min="1" value="{{ defaults.doh_target_a }}"></div>
+      <div><label>B</label> <input type="number" name="doh_target_b"      step="0.5" min="1" value="{{ defaults.doh_target_b }}"></div>
+      <div><label>C</label> <input type="number" name="doh_target_c"      step="0.5" min="1" value="{{ defaults.doh_target_c }}"></div>
+      <div><label>Alert at actual &gt; target ×</label>
+        <input type="number" name="doi_alert_multiplier" step="0.1" min="1.0" value="{{ defaults.doi_alert_multiplier }}"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="display:flex; justify-content:flex-end; gap:var(--sp-2)">
+    <button type="reset" class="btn ghost">Reset</button>
+    <button type="submit" class="btn primary">Build profile →</button>
+  </div>
+</div>
+
+</form>
+
+
+{% if result %}
+
+<!-- Headline tiles -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Headline shape of orders</div>
+      <div class="panel-sub">Four numbers that tell you what a typical order looks like in this window.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Units per order</div>
+          <div class="tile-id">A1</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.units_per_order or "—" }}<span class="tile-unit">{{ result.tiles.vol_label }}</span></div>
+        <div class="tile-meta">across {{ "{:,}".format(result.tiles.total_orders) }} orders</div>
+      </div>
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Lines per order</div>
+          <div class="tile-id">A2</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.lines_per_order or "—" }}<span class="tile-unit">SKUs</span></div>
+        <div class="tile-meta">avg distinct SKUs per order</div>
+      </div>
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Units per line</div>
+          <div class="tile-id">A3</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.units_per_line or "—" }}<span class="tile-unit">units</span></div>
+        <div class="tile-meta">weighted pick size</div>
+      </div>
+      <div class="tile">
+        <div class="tile-header">
+          <div class="tile-label">Active SKUs / day</div>
+          <div class="tile-id">A4</div>
+        </div>
+        <div class="tile-value">{{ result.tiles.active_skus_per_day or "—" }}<span class="tile-unit">SKUs</span></div>
+        <div class="tile-meta">mean over the window</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ABC × FMS matrix set -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">
+        ABC × FMS cluster views
+        <span class="chip">B</span>
+        <span class="fms-chip">FMS is display only</span>
+      </div>
+      <div class="panel-sub">
+        Where SKUs sit on two axes at once: how fast they move (FMS, display only) and how much they contribute (ABC).
+        Darker cells carry more. Read the F / A corner for "fast + top contributor".
+      </div>
+    </div>
+    <div class="matrix-legend">
+      <span>low</span>
+      <div class="matrix-legend-bar"></div>
+      <span>high</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="matrix-row">
+      {% for name, cells, pid in [("SKU count", result.abc_fms_sku_count, "B1"),
+                                   ("Units ordered", result.abc_fms_units, "B2"),
+                                   ("Order lines", result.abc_fms_lines, "B3")] %}
+      <div>
+        <div class="matrix-title">
+          <span>{{ name }}</span>
+          <span class="chip">{{ pid }}</span>
+        </div>
+        {% if cells %}
+          {% set abcs = cells | map(attribute='abc') | unique | list %}
+          {% set fmss = cells | map(attribute='fms') | unique | list %}
+          {% set max_v = cells | map(attribute='value') | max %}
+          <div class="matrix-grid" style="--matrix-cols: {{ fmss|length }}">
+            <div class="matrix-cell header"></div>
+            {% for fms in fmss %}<div class="matrix-cell header">{{ fms }}</div>{% endfor %}
+            {% for abc in abcs %}
+              <div class="matrix-cell row-header">{{ abc }}</div>
+              {% for fms in fmss %}
+                {% set cell = cells | selectattr('abc','equalto',abc) | selectattr('fms','equalto',fms) | first %}
+                {% set v = cell.value if cell else 0 %}
+                {% set step = ((v / max_v * 8) | round(0, 'floor') | int) if (max_v and v) else 0 %}
+                <div class="matrix-cell"
+                     style="background: var(--seq-{{ step }}); color: {% if step >= 5 %}#0A1222{% else %}var(--ink-secondary){% endif %};"
+                     title="{{ abc }} &times; {{ fms }} = {{ v }}">
+                  {% if v %}{{ "{:,.0f}".format(v) if v == v|round(0) else "{:,.1f}".format(v) }}{% else %}&middot;{% endif %}
+                </div>
+              {% endfor %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="hint">No data in window.</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+
+<!-- Heatmaps -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">SKU demand over the window <span class="chip">C1</span></div>
+      <div class="panel-sub">
+        Each row is one of the busiest SKUs. Each column is one day in the window. Darker means more {{ result.tiles.vol_label }} that day.
+        Horizontal streaks are steady movers; vertical streaks are spike days.
+      </div>
+    </div>
+    <span class="chip info">Top-{{ result.config.top_n_skus }}</span>
+  </div>
+  <div class="panel-body">
+    {{ heatmap_table(result.sku_day_heatmap, rows='skus', cols='dates') }}
+    <div class="heatmap-legend">
+      <span>0</span>
+      <div class="legend-ramp"></div>
+      <span>{{ result.sku_day_heatmap.max_v }}</span>
+      <span style="margin-left:auto">{{ result.sku_day_heatmap.skus|length }} SKUs × {{ result.sku_day_heatmap.dates|length }} days</span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">When those SKUs get picked, by hour <span class="chip">C2</span></div>
+      <div class="panel-sub">
+        Same SKUs as above, but spread across the 24 hours of a day. Tells you whether a SKU peaks in the morning wave,
+        the afternoon wave, or runs flat all day. Needs timestamped order lines.
+      </div>
+    </div>
+  </div>
+  <div class="panel-body">
+    {% if result.hour_of_day_available %}
+      {{ heatmap_table(result.sku_hour_heatmap, rows='skus', cols='hours') }}
+      <div class="heatmap-legend">
+        <span>0</span>
+        <div class="legend-ramp"></div>
+        <span>{{ result.sku_hour_heatmap.max_v }}</span>
+        <span style="margin-left:auto">hour-bucketed</span>
+      </div>
+    {% else %}
+      <div class="op-banner">Timestamps not available on order_lines in this upload. Panel inactive.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Category mix, week by week <span class="chip">C3</span></div>
+      <div class="panel-sub">
+        One row per product category, one column per week. Darker cells are weeks where that category moved a lot.
+        Use this to spot seasonality or a category gaining and losing weight over time.
+      </div>
+    </div>
+  </div>
+  <div class="panel-body">
+    {% if result.category_available %}
+      {{ heatmap_table(result.category_week_heatmap, rows='categories', cols='weeks') }}
+      <div class="heatmap-legend">
+        <span>0</span>
+        <div class="legend-ramp"></div>
+        <span>{{ result.category_week_heatmap.max_v }}</span>
+        <span style="margin-left:auto">{{ result.category_week_heatmap.categories|length }} categories × {{ result.category_week_heatmap.weeks|length }} weeks</span>
+      </div>
+    {% else %}
+      <div class="op-banner"><code>material_category</code> not on sku_master. Panel inactive.</div>
+    {% endif %}
+  </div>
+</div>
+
+
+<!-- Stratification + DOI -->
+<div class="grid-2">
+
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">What an order usually contains <span class="chip">D1</span></div>
+        <div class="panel-sub">
+          Every order gets a pattern: the set of classes present in it. "A B C" means that order touched one A SKU, one B SKU, one C SKU.
+          The top rows are the most common patterns. If "A" alone is the top pattern, most orders are a single fast-mover.
+        </div>
+      </div>
+    </div>
+    <div class="panel-body">
+      {% if result.order_stratification %}
+        {% set max_pct = (result.order_stratification | map(attribute='pct') | max) or 1 %}
+        <div style="display:grid; grid-template-columns: 1fr 70px 1fr 60px; gap:var(--sp-3); font-size: var(--fs-11); color:var(--ink-muted); text-transform:uppercase; letter-spacing:1px; font-weight:700; padding: 0 var(--sp-3) var(--sp-2); border-bottom:1px solid var(--border-subtle)">
+          <div>Pattern</div>
+          <div class="text-right">Orders</div>
+          <div>Share</div>
+          <div class="text-right">%</div>
+        </div>
+        {% for row in result.order_stratification[:20] %}
+          <div style="display:grid; grid-template-columns: 1fr 70px 1fr 60px; gap:var(--sp-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-subtle); align-items:center; font-size: var(--fs-13)">
+            <div>
+              {% for letter in (row.pattern or '').split() %}
+                <span class="cls {{ letter|lower }}">{{ letter }}</span>
+              {% else %}
+                <span class="hint">(no class)</span>
+              {% endfor %}
+            </div>
+            <div class="num text-right">{{ "{:,}".format(row.orders) }}</div>
+            <div class="op-strat-bar"><span style="width: {{ (row.pct / max_pct * 100) | round(1) }}%"></span></div>
+            <div class="num text-right">{{ "%.1f"|format(row.pct) }}%</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="hint">No stratification data (order_id missing or window empty).</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">Stock vs target, by class <span class="chip">D2</span></div>
+        <div class="panel-sub">
+          How many days of stock the warehouse is holding (actual DOI) against how many days it is supposed to hold (target DOH), per class.
+          The grey tick in each bar is the target; the fill is the actual. If the actual blows past the target by more than
+          {{ result.config.doi_alert_multiplier }}×, the row flips to Over.
+        </div>
+      </div>
+    </div>
+    <div class="panel-body" style="padding: 0 var(--sp-2) var(--sp-3)">
+      {% if result.doi_vs_doh %}
+        <table class="data">
+          <thead>
+            <tr><th>Class</th><th class="num">Actual</th><th class="num">Target</th><th>DOI vs DOH</th><th class="num">SKUs</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for row in result.doi_vs_doh %}
+            <tr>
+              <td><span class="cls {{ row.class|lower }}">{{ row.class }}</span></td>
+              <td class="num">{{ row.actual_doi }}d</td>
+              <td class="num">{{ row.target_doh }}d</td>
+              <td style="min-width: 180px">
+                {% set ratio_max = 200 %}
+                {% set actual_pct = (row.actual_doi / ratio_max * 100) | round(1) %}
+                {% set target_pct = ((row.target_doh or 0) / ratio_max * 100) | round(1) %}
+                <div style="height:8px; background: var(--surface-sunken); border-radius: 4px; overflow:hidden; position: relative">
+                  <div style="height:100%; width: {{ actual_pct if actual_pct <= 100 else 100 }}%; background: var(--{{ 'danger' if row.flag else 'cls-a' }}); border-radius: 4px"></div>
+                  <div style="position:absolute; top:-2px; bottom:-2px; left: {{ target_pct }}%; width: 2px; background: var(--ink-muted)"></div>
+                </div>
+              </td>
+              <td class="num">{{ row.skus }}</td>
+              <td><span class="status-pill {{ 'over' if row.flag else 'ok' }}">{{ 'Over' if row.flag else 'OK' }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="hint" style="padding: var(--sp-3)">stock_on_hand not uploaded, or no overlap with order activity.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+
+<!-- Suggestions -->
+{% if result.suggestions %}
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Suggestions to Setup</div>
+      <div class="panel-sub">Panel-grounded tuning for the classifier. Each carries its source panel for audit.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    {% for s in result.suggestions %}
+      <div class="op-suggest" style="display:grid; grid-template-columns: 1fr auto; gap: var(--sp-4); align-items:center">
+        <div>
+          <div style="display:flex; align-items:center; gap: var(--sp-2); margin-bottom: 4px">
+            <span class="chip brand">from {{ s.source_panel }}</span>
+            <span class="tgt">Setup.{{ s.target }} = {{ s.value }}</span>
+          </div>
+          <div style="color: var(--ink-secondary); font-size: var(--fs-13)">{{ s.reason }}</div>
+        </div>
+        <button type="button" class="btn primary sm" disabled title="Wiring to /classify coming in v0.7">Apply</button>
+      </div>
+    {% endfor %}
+    <div class="hint" style="margin-top: var(--sp-3)">Apply buttons will be wired to /classify in a follow-up PR. Values here are advisory only.</div>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+<style>
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: var(--brand-red);
+  color: var(--ink-on-brand);
+  font-weight: 800;
+  font-size: var(--fs-13);
+  border-radius: var(--r-sm);
+  letter-spacing: 0;
+  flex: 0 0 auto;
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  document.querySelectorAll('.filedrop').forEach(fd => {
+    const input = fd.querySelector('input[type=file]');
+    const fn = fd.querySelector('[data-fn]');
+    if (!input || !fn) return;
+    input.addEventListener('change', () => {
+      if (input.files && input.files[0]) {
+        fn.textContent = input.files[0].name;
+        fd.classList.add('has-file');
+      } else {
+        fn.textContent = '';
+        fd.classList.remove('has-file');
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

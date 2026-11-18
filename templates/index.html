@@ -1,35 +1,40 @@
 {% extends "base.html" %}
 {% block page_title %}New classification{% endblock %}
+{% block topbar_actions %}{% endblock %}
+
 {% block content %}
 
-<div class="page-head">
-  <div>
-    <h1>Configure a new classification</h1>
-    <div class="sub">Upload order lines, SKU master and (optionally) stock on hand. Pick the basis and parameters. Run.</div>
-  </div>
+{# Guidance strip for first-time users, dismissible, scoped to this page #}
+<div class="guide-strip" id="guideStrip">
+  <div class="guide-step"><span class="gs-n">1</span> Fill in the client &amp; warehouse name</div>
+  <span class="guide-sep">→</span>
+  <div class="guide-step"><span class="gs-n">2</span> Drop the two required files</div>
+  <span class="guide-sep">→</span>
+  <div class="guide-step"><span class="gs-n">3</span> Wait for the green check</div>
+  <span class="guide-sep">→</span>
+  <div class="guide-step"><span class="gs-n">4</span> Click Run classification</div>
+  <button class="guide-dismiss" onclick="dismissGuide()" aria-label="Dismiss guide" title="Hide for next time">×</button>
 </div>
 
 <form method="post" action="/classify" enctype="multipart/form-data" id="runForm">
 
-<!-- Scope -->
+<!-- STEP 1 - Scope -->
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">1 · Scope</div>
-      <div class="panel-sub">Who this run is for and who's running it.</div>
+      <div class="panel-title"><span class="step-num">1</span> Scope</div>
+      <div class="panel-sub">Who this run is for.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-2">
       <div>
         <label class="field">Client / site name</label>
-        <input type="text" name="site_name" placeholder="e.g. ACME Noida" required>
-        <div class="hint">Shown on results and in exports. One client per run.</div>
+        <input type="text" name="site_name" placeholder="e.g. SAS Indiana" required>
       </div>
       <div>
         <label class="field">Warehouse code</label>
-        <input type="text" name="warehouse_code" placeholder="e.g. DC-NORTH-01" required>
-        <div class="hint">Should match the warehouse tag used in order_lines.</div>
+        <input type="text" name="warehouse_code" placeholder="e.g. SAS_IND" required>
       </div>
       <div>
         <label class="field">Operator</label>
@@ -43,77 +48,78 @@
   </div>
 </div>
 
-<!-- Upload -->
+<!-- STEP 2 - Upload with live quality check -->
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">2 · Upload data assets</div>
-      <div class="panel-sub">xlsx, csv or parquet. Schemas in <a href="/docs/logic" class="chip">docs/data_schema.md</a>.</div>
+      <div class="panel-title"><span class="step-num">2</span> Upload data</div>
+      <div class="panel-sub">xlsx, csv or parquet. Quality check runs the moment both required files are in.</div>
     </div>
   </div>
   <div class="panel-body">
     <div class="grid-3">
-
       <div>
-        <div class="field">Asset 1 · order_lines <span style="color:var(--crit)">*</span></div>
+        <div class="field">order_lines <span class="req-star">*</span></div>
         <div class="filedrop" data-fd="ol">
           <div class="fd-label">Drop file or click to select</div>
-          <div class="fd-hint">Required: sku_code, pick_date, qty_shipped, n_tasks. Aliases accepted (n_events, picked_qty, etc.). HTML extracts streamed.</div>
+          <div class="fd-hint">Required: sku_code, pick_date, qty_shipped, n_tasks</div>
           <div class="filename" data-fn></div>
-          <input type="file" name="order_lines_file" required accept=".xlsx,.csv,.parquet,.html,.htm">
+          <input type="file" name="order_lines_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         </div>
       </div>
-
       <div>
-        <div class="field">Asset 2 · sku_master <span style="color:var(--crit)">*</span></div>
+        <div class="field">sku_master <span class="req-star">*</span></div>
         <div class="filedrop" data-fd="sm">
           <div class="fd-label">Drop file or click to select</div>
           <div class="fd-hint">Required: sku_code, sku_description, status_derived</div>
           <div class="filename" data-fn></div>
-          <input type="file" name="sku_master_file" required accept=".xlsx,.csv,.parquet">
+          <input type="file" name="sku_master_file" required accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         </div>
       </div>
-
       <div>
-        <div class="field">Asset 3 · stock_on_hand (optional)</div>
+        <div class="field">stock_on_hand (optional)</div>
         <div class="filedrop" data-fd="so">
           <div class="fd-label">Drop file or click to select</div>
           <div class="fd-hint">Enables DOI. sku_code, qty_on_hand.</div>
           <div class="filename" data-fn></div>
-          <input type="file" name="stock_on_hand_file" accept=".xlsx,.csv,.parquet">
+          <input type="file" name="stock_on_hand_file" accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         </div>
       </div>
-
     </div>
 
-    <!-- Forecast upload — shown only when basis != historical -->
+    <!-- Forecast upload only when basis != historical -->
     <div class="grid-2" id="forecast-upload-row" style="margin-top:14px; display:none">
       <div>
-        <div class="field">Asset 4 · forecast <span style="color:var(--crit)">*</span> <span class="chip">Forecast / Combined basis</span></div>
+        <div class="field">forecast file <span class="req-star">*</span> <span class="chip brand">Forecast / Combined basis</span></div>
         <div class="filedrop" data-fd="fc">
           <div class="fd-label">Drop file or click to select</div>
-          <div class="fd-hint">Required: sku_code, forecast_date, forecast_units</div>
+          <div class="fd-hint">sku_code, forecast_date, forecast_units</div>
           <div class="filename" data-fn></div>
-          <input type="file" name="forecast_file" accept=".xlsx,.csv,.parquet">
+          <input type="file" name="forecast_file" accept=".xlsx,.xls,.csv,.csv.gz,.csv.zip,.tsv,.tab,.txt,.parquet,.feather,.arrow,.json,.jsonl,.ndjson,.html,.htm,.db,.sqlite,.sqlite3">
         </div>
       </div>
       <div class="alert info">
         <span class="ico">i</span>
-        <div>
-          Forecast file comes from your demand-planning engine. Grain is SKU × date in base UOM.
-          Historical basis does not need this.
-        </div>
+        <div>Forecast file comes from your demand-planning engine. Grain is SKU × date in base UOM.</div>
+      </div>
+    </div>
+
+    <!-- Live quality panel (populated by /api/preview-check once both files are in) -->
+    <div class="quality-panel" id="qualityPanel" aria-live="polite">
+      <div class="qp-idle">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span>Waiting for both required files…</span>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Basis -->
+<!-- STEP 3 - Basis -->
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">3 · Basis <span style="color:var(--crit)">*</span></div>
-      <div class="panel-sub">No silent default — this decision changes what the run scores on.</div>
+      <div class="panel-title"><span class="step-num">3</span> Basis</div>
+      <div class="panel-sub">What the run scores on. Historical is the default and only needs order_lines.</div>
     </div>
   </div>
   <div class="panel-body">
@@ -141,61 +147,56 @@
       </label>
     </div>
 
-    <div class="grid-3" style="margin-top:12px">
-      <div>
+    <div class="basis-fields" style="margin-top:12px">
+      <div id="field-histwin" class="basis-field">
         <label class="field">Historical window (days)</label>
         <input type="number" name="historical_window_days" value="90" min="1" max="730">
-        <div class="hint">1 to full history available.</div>
+        <div class="hint">How far back pick activity is counted.</div>
       </div>
-      <div>
+      <div id="field-fchorizon" class="basis-field" style="display:none">
         <label class="field">Forecast horizon (days)</label>
         <input type="number" name="forecast_horizon_days" value="30" min="1" max="365">
-        <div class="hint">Used for Forecast or Combined.</div>
+        <div class="hint">How far ahead the forecast scoring looks.</div>
       </div>
-      <div>
+      <div id="field-mix" class="basis-field" style="display:none">
         <label class="field">Combined mix (history %)</label>
         <input type="number" name="combined_mix_history_pct" value="60" min="0" max="100">
-        <div class="hint">Forecast gets 100 − this value.</div>
+        <div class="hint">Forecast gets 100 minus this value.</div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Weights -->
-<div class="panel">
-  <div class="panel-head">
+<!-- STEP 4..7 - Advanced parameters, collapsed by default to keep the page scannable -->
+<details class="panel">
+  <summary class="panel-head" style="cursor:pointer">
     <div>
-      <div class="panel-title">4 · Ranking weights</div>
-      <div class="panel-sub">Blend of frequency (pick tasks) and volume (units) by percentile rank.</div>
+      <div class="panel-title"><span class="step-num">4</span> Advanced parameters</div>
+      <div class="panel-sub">Ranking weights, cut-offs, add-ons, thresholds. Click to expand. Defaults match most monthly runs.</div>
     </div>
-  </div>
+  </summary>
   <div class="panel-body">
-    <div class="grid-2">
-      <div>
-        <label class="field">Frequency weight</label>
-        <input type="range" min="0" max="1" step="0.05" value="0.70" id="wFR" oninput="syncWeights('F')">
-        <input type="number" min="0" max="1" step="0.05" value="0.70" name="frequency_weight" id="wF" oninput="syncWeights('F')" style="margin-top:4px">
-      </div>
-      <div>
-        <label class="field">Volume weight</label>
-        <input type="range" min="0" max="1" step="0.05" value="0.30" id="wVR" oninput="syncWeights('V')">
-        <input type="number" min="0" max="1" step="0.05" value="0.30" name="volume_weight" id="wV" oninput="syncWeights('V')" style="margin-top:4px">
-      </div>
-    </div>
-    <div class="hint" id="weight-sum" style="margin-top:8px">Sum: 1.00 (auto-normalised during scoring)</div>
-  </div>
-</div>
 
-<!-- Cut-offs -->
-<div class="panel">
-  <div class="panel-head">
-    <div>
-      <div class="panel-title">5 · Cut-offs</div>
-      <div class="panel-sub">% of scorable SKUs by rank. A + B must be &lt; 100.</div>
+    <label class="field" style="margin-bottom: var(--sp-3)">Ranking weights</label>
+    <div class="weight-split" style="margin-bottom: var(--sp-4)">
+      <div class="weight-side weight-left">
+        <div class="weight-label">Frequency</div>
+        <div class="weight-value" id="freqVal">0.70</div>
+      </div>
+      <input type="range" min="0" max="1" step="0.05" value="0.70" id="weightSlider" class="weight-slider" oninput="updateWeightSplit()" aria-label="Frequency to Volume weight split">
+      <div class="weight-side weight-right">
+        <div class="weight-label">Volume</div>
+        <div class="weight-value" id="volVal">0.30</div>
+      </div>
     </div>
-  </div>
-  <div class="panel-body">
-    <div class="preset-row">
+    <input type="hidden" name="frequency_weight" id="freqField" value="0.70">
+    <input type="hidden" name="volume_weight"    id="volField"  value="0.30">
+    <div class="hint" style="text-align:center;margin-bottom: var(--sp-5)">Drag toward Frequency to prioritise how often a SKU is picked; toward Volume to prioritise how much it moves.</div>
+
+    <div class="section-divider"></div>
+
+    <label class="field" style="margin-bottom: var(--sp-3)">Cut-offs (% of scorable SKUs per class)</label>
+    <div class="preset-row" style="margin-bottom: var(--sp-4)">
       {% for key, p in presets.items() %}
       <button type="button" class="preset {% if key == 'distributor_10_30_60' %}selected{% endif %}"
               onclick="applyPreset(this, {{ p.a }}, {{ p.b }})">
@@ -205,7 +206,6 @@
       </button>
       {% endfor %}
     </div>
-    <div class="section-divider"></div>
     <div class="grid-3">
       <div>
         <label class="field">A (top %)</label>
@@ -220,53 +220,37 @@
         <input type="number" id="cPreview" value="60" disabled>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- Add-ons -->
-<div class="panel">
-  <div class="panel-head">
-    <div>
-      <div class="panel-title">6 · Add-ons <span class="chip">optional</span></div>
-      <div class="panel-sub">Classifier runs without these. Enable per run as needed.</div>
-    </div>
-  </div>
-  <div class="panel-body">
-    <div class="grid-3">
+    <div class="section-divider"></div>
+
+    <label class="field" style="margin-bottom: var(--sp-3)">Add-ons</label>
+    <div class="grid-3" style="margin-bottom: var(--sp-5)">
       <label class="chk">
         <input type="checkbox" name="enable_derivative_suggestions" checked>
         <div>
           <div class="chk-label">Derivative suggestions</div>
-          <div class="chk-desc">Auto-suggest parent SKUs for no-history items (spinoffs / variants).</div>
+          <div class="chk-desc">Auto-suggest parent SKUs for no-history items.</div>
         </div>
       </label>
       <label class="chk">
         <input type="checkbox" name="enable_xyz">
         <div>
           <div class="chk-label">XYZ overlay</div>
-          <div class="chk-desc">Demand variability (CoV). Second axis on top of ABC.</div>
+          <div class="chk-desc">Demand variability on top of ABC.</div>
         </div>
       </label>
       <label class="chk">
         <input type="checkbox" name="enable_exceptions">
         <div>
           <div class="chk-label">Exception rules</div>
-          <div class="chk-desc">Seasonal, promotional, co-pick overlays. UI opens after classification.</div>
+          <div class="chk-desc">Seasonal, promotional, co-pick overlays.</div>
         </div>
       </label>
     </div>
-  </div>
-</div>
 
-<!-- Advanced -->
-<details class="panel">
-  <summary class="panel-head" style="cursor:pointer">
-    <div>
-      <div class="panel-title">7 · Advanced thresholds</div>
-      <div class="panel-sub">Change only if you know why.</div>
-    </div>
-  </summary>
-  <div class="panel-body">
+    <div class="section-divider"></div>
+
+    <label class="field" style="margin-bottom: var(--sp-3)">Thresholds</label>
     <div class="grid-3">
       <div>
         <label class="field">Min history to score (days)</label>
@@ -284,28 +268,195 @@
   </div>
 </details>
 
-<!-- Submit -->
-<div class="panel">
-  <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-    <div class="hint">Run saves to the local SQLite DB and can be revisited from Run history or What changes.</div>
-    <div style="display:flex;gap:8px">
+<!-- Run -->
+<div class="panel run-strip">
+  <div class="panel-body">
+    <div class="run-strip-left">
+      <div class="run-strip-title">Ready to classify?</div>
+      <div class="hint" id="runHelp">Upload both required files first.</div>
+    </div>
+    <div class="run-strip-right">
       <button type="reset" class="btn ghost">Reset</button>
-      <button type="submit" class="btn primary" id="runBtn">Run classification →</button>
+      <button type="submit" class="btn primary lg" id="runBtn" disabled>Run classification →</button>
     </div>
   </div>
 </div>
 
 </form>
 
+<style>
+/* Guide strip, scoped to new-classification */
+.guide-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: linear-gradient(135deg, var(--cls-a-tint), transparent);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--brand-red);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-13);
+  color: var(--ink-primary);
+  position: relative;
+  flex-wrap: wrap;
+}
+.guide-strip.hidden { display: none; }
+.guide-step { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.gs-n {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  background: var(--brand-red);
+  color: var(--ink-on-brand);
+  font-weight: 800;
+  font-size: var(--fs-11);
+  border-radius: 50%;
+}
+.guide-sep { color: var(--ink-muted); font-weight: 600; }
+.guide-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--ink-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  border-radius: var(--r-sm);
+}
+.guide-dismiss:hover { background: var(--surface-hover); color: var(--ink-primary); }
+
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: var(--brand-red);
+  color: var(--ink-on-brand);
+  font-weight: 800;
+  font-size: var(--fs-13);
+  border-radius: var(--r-sm);
+  flex: 0 0 auto;
+}
+
+.req-star { color: var(--danger); font-weight: 700; }
+
+/* Live quality panel */
+.quality-panel {
+  margin-top: var(--sp-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.quality-panel.state-ok    { border-color: var(--success); background: rgba(45, 186, 123, 0.06); }
+.quality-panel.state-warn  { border-color: var(--warning); background: rgba(245, 158, 11, 0.06); }
+.quality-panel.state-block { border-color: var(--danger);  background: rgba(239, 68, 68, 0.06); }
+
+.qp-idle, .qp-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  color: var(--ink-secondary);
+  font-size: var(--fs-13);
+}
+.qp-loading svg {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.qp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 700;
+  font-size: var(--fs-14);
+  gap: var(--sp-3);
+}
+.qp-head .qp-icon { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px; }
+.quality-panel.state-ok    .qp-icon { background: var(--success); }
+.quality-panel.state-warn  .qp-icon { background: var(--warning); }
+.quality-panel.state-block .qp-icon { background: var(--danger); }
+.qp-title { flex: 1; }
+.qp-counts { font-size: var(--fs-12); color: var(--ink-secondary); font-weight: 600; }
+
+.qp-filebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+.qp-filechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+  color: var(--ink-primary);
+}
+.qp-filechip .key { color: var(--ink-secondary); font-weight: 600; }
+.qp-filechip .rows { font-family: var(--font-mono); color: var(--ink-secondary); }
+
+.qp-checks { padding: 0; }
+.qp-check {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-13);
+}
+.qp-check:last-child { border-bottom: none; }
+.qp-check-ico { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; }
+.qp-check-ico.pass  { background: var(--success); }
+.qp-check-ico.warn  { background: var(--warning); }
+.qp-check-ico.block { background: var(--danger); }
+.qp-check-name { font-weight: 600; color: var(--ink-primary); }
+.qp-check-detail { font-size: var(--fs-12); color: var(--ink-secondary); margin-top: 2px; }
+
+.qp-error {
+  padding: var(--sp-4);
+  color: var(--danger);
+  font-size: var(--fs-13);
+}
+
+/* Run strip */
+.run-strip .panel-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.run-strip-title { font-size: var(--fs-18); font-weight: 700; letter-spacing: -0.3px; color: var(--ink-primary); }
+.run-strip-right { display: flex; gap: var(--sp-2); }
+.btn.lg { padding: 12px 22px; font-size: var(--fs-15); }
+</style>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function(){
-  // file drop state + filename display
+
+  /* File-drop visual state + name display, + preview-check trigger */
+  const fileEls = {};
   document.querySelectorAll('.filedrop').forEach(fd => {
     const input = fd.querySelector('input[type=file]');
     const fn = fd.querySelector('[data-fn]');
+    fileEls[input.name] = input;
     input.addEventListener('change', () => {
       if (input.files && input.files[0]) {
         fn.textContent = input.files[0].name;
@@ -314,53 +465,209 @@
         fn.textContent = '';
         fd.classList.remove('has-file');
       }
+      schedulePreview();
     });
   });
 
-  // basis radio selected-state + reveal forecast upload
+  /* Basis radio UX: show only the input(s) that apply to the chosen basis,
+     plus reveal the forecast upload when needed. */
   function updateBasis() {
     const selected = document.querySelector('input[name=basis]:checked');
+    const basis = selected ? selected.value : 'historical';
     document.querySelectorAll('.chk[data-basis]').forEach(el => {
       const inp = el.querySelector('input');
       el.classList.toggle('selected', inp.checked);
     });
-    const needsFc = selected && (selected.value === 'forecast' || selected.value === 'combined');
-    document.getElementById('forecast-upload-row').style.display = needsFc ? '' : 'none';
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+    show('field-histwin',  basis === 'historical' || basis === 'combined');
+    show('field-fchorizon', basis === 'forecast'  || basis === 'combined');
+    show('field-mix',       basis === 'combined');
+    const needsFc = basis === 'forecast' || basis === 'combined';
+    const row = document.getElementById('forecast-upload-row');
+    if (row) row.style.display = needsFc ? '' : 'none';
     const fcInput = document.querySelector('input[name=forecast_file]');
     if (fcInput) fcInput.required = needsFc;
   }
   document.querySelectorAll('input[name=basis]').forEach(inp => inp.addEventListener('change', updateBasis));
   updateBasis();
 
-  // reset button clears file display
+  /* Reset wiring */
   const resetBtn = document.querySelector('button[type=reset]');
   if (resetBtn) resetBtn.addEventListener('click', () => {
     setTimeout(() => {
       document.querySelectorAll('.filedrop').forEach(d => d.classList.remove('has-file'));
       document.querySelectorAll('[data-fn]').forEach(f => f.textContent = '');
       updateBasis();
+      resetQualityPanel();
+      setRunReady(false, 'Upload both required files first.');
     }, 10);
   });
 
-  // spinner on submit
+  /* Submit UX */
   document.getElementById('runForm').addEventListener('submit', () => {
     const btn = document.getElementById('runBtn');
     btn.disabled = true;
     btn.textContent = 'Running classification…';
   });
+
+  /* ----- Live quality preview ----- */
+  const panel = document.getElementById('qualityPanel');
+  const runBtn = document.getElementById('runBtn');
+  const runHelp = document.getElementById('runHelp');
+  let _previewAbort = null;
+  let _previewTimer = null;
+
+  function setRunReady(ok, msg) {
+    runBtn.disabled = !ok;
+    runHelp.textContent = msg;
+  }
+
+  function resetQualityPanel() {
+    panel.className = 'quality-panel';
+    panel.innerHTML = `
+      <div class="qp-idle">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span>Waiting for both required files…</span>
+      </div>`;
+  }
+
+  function schedulePreview() {
+    const ol = fileEls['order_lines_file'];
+    const sm = fileEls['sku_master_file'];
+    if (!ol || !ol.files[0] || !sm || !sm.files[0]) {
+      resetQualityPanel();
+      setRunReady(false, 'Upload both required files first.');
+      return;
+    }
+    clearTimeout(_previewTimer);
+    _previewTimer = setTimeout(runPreview, 250);
+  }
+
+  async function runPreview() {
+    if (_previewAbort) _previewAbort.abort();
+    _previewAbort = new AbortController();
+
+    panel.className = 'quality-panel';
+    panel.innerHTML = `
+      <div class="qp-loading">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 11-6.2-8.56"/></svg>
+        <span>Checking file structure and quality…</span>
+      </div>`;
+    setRunReady(false, 'Checking files…');
+
+    const fd = new FormData();
+    fd.append('order_lines_file', fileEls['order_lines_file'].files[0]);
+    fd.append('sku_master_file',  fileEls['sku_master_file'].files[0]);
+    const soh = fileEls['stock_on_hand_file'];
+    if (soh && soh.files[0]) fd.append('stock_on_hand_file', soh.files[0]);
+
+    try {
+      const r = await fetch('/api/preview-check', { method: 'POST', body: fd, signal: _previewAbort.signal });
+      const data = await r.json();
+      renderPreview(data);
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      panel.className = 'quality-panel state-block';
+      panel.innerHTML = `<div class="qp-error">Could not reach the quality checker. ${escapeHTML(String(e))}</div>`;
+      setRunReady(false, 'Quality check failed. Try again.');
+    }
+  }
+
+  function renderPreview(data) {
+    if (data.error) {
+      panel.className = 'quality-panel state-block';
+      panel.innerHTML = `<div class="qp-error">${escapeHTML(data.error)}</div>`;
+      setRunReady(false, 'Fix the file error above, then re-upload.');
+      return;
+    }
+
+    const checks = data.checks || [];
+    const blocking = !!data.blocking;
+    const passCount = checks.filter(c => c.passed).length;
+    const warnCount = checks.filter(c => !c.passed && c.severity === 'warn').length;
+    const blockCount = checks.filter(c => !c.passed && c.severity === 'block').length;
+
+    const state = blockCount ? 'block' : (warnCount ? 'warn' : 'ok');
+    const stateLabel = state === 'ok' ? 'All checks passed' :
+                       state === 'warn' ? 'Checks passed with warnings' :
+                       'Blocking issues found';
+    const stateIcon  = state === 'ok' ? '✓' : state === 'warn' ? '!' : '×';
+
+    const files = data.files || {};
+    const fileChip = (key, label) => {
+      const f = files[key];
+      if (!f) return '';
+      const rows = f.rows != null ? `<span class="rows">${f.rows.toLocaleString()} rows</span>` : '';
+      return `<span class="qp-filechip"><span class="key">${label}</span> ${escapeHTML(f.name)} ${rows}</span>`;
+    };
+
+    panel.className = `quality-panel state-${state}`;
+    panel.innerHTML = `
+      <div class="qp-head">
+        <div class="qp-icon">${stateIcon}</div>
+        <div class="qp-title">${stateLabel}</div>
+        <div class="qp-counts">${passCount} passed · ${warnCount} warn · ${blockCount} block</div>
+      </div>
+      <div class="qp-filebar">
+        ${fileChip('order_lines', 'order_lines')}
+        ${fileChip('sku_master', 'sku_master')}
+        ${fileChip('stock_on_hand', 'stock_on_hand')}
+      </div>
+      <div class="qp-checks">
+        ${checks.map(c => {
+          const cls = c.passed ? 'pass' : (c.severity === 'block' ? 'block' : 'warn');
+          const ico = c.passed ? '✓' : (c.severity === 'block' ? '×' : '!');
+          return `<div class="qp-check">
+            <div class="qp-check-ico ${cls}">${ico}</div>
+            <div>
+              <div class="qp-check-name">${escapeHTML(c.name)}</div>
+              <div class="qp-check-detail">${escapeHTML(c.detail)}</div>
+            </div>
+            <code class="chip">${escapeHTML(c.severity)}</code>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    if (blocking) {
+      setRunReady(false, 'Fix the blocking issues before running.');
+    } else if (warnCount) {
+      setRunReady(true, 'Warnings noted. You can proceed if you accept them.');
+    } else {
+      setRunReady(true, 'Files look good. Ready to run.');
+    }
+  }
+
+  function escapeHTML(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+  }
+
+  /* Re-trigger preview when mode changes (forecast file requirement changes) */
+  document.addEventListener('abc-mode-change', () => { schedulePreview(); });
+
+  /* Guide strip dismiss */
+  window.dismissGuide = function() {
+    document.getElementById('guideStrip').classList.add('hidden');
+    try { localStorage.setItem('abc-guide-dismissed', '1'); } catch (e) {}
+  };
+  try {
+    if (localStorage.getItem('abc-guide-dismissed') === '1') {
+      document.getElementById('guideStrip').classList.add('hidden');
+    }
+  } catch (e) {}
 })();
 
-function syncWeights(src) {
-  const wF = document.getElementById('wF');
-  const wV = document.getElementById('wV');
-  const wFR = document.getElementById('wFR');
-  const wVR = document.getElementById('wVR');
-  if (src === 'F') { wFR.value = wF.value; wV.value = (1 - parseFloat(wF.value)).toFixed(2); wVR.value = wV.value; }
-  else             { wVR.value = wV.value; wF.value = (1 - parseFloat(wV.value)).toFixed(2); wFR.value = wF.value; }
-  document.getElementById('weight-sum').textContent =
-    'Sum: ' + (parseFloat(wF.value) + parseFloat(wV.value)).toFixed(2) + ' (auto-normalised during scoring)';
+function updateWeightSplit() {
+  const s = document.getElementById('weightSlider');
+  if (!s) return;
+  const freq = parseFloat(s.value);
+  const vol  = +(1 - freq).toFixed(2);
+  document.getElementById('freqVal').textContent  = freq.toFixed(2);
+  document.getElementById('volVal').textContent   = vol.toFixed(2);
+  document.getElementById('freqField').value      = freq.toFixed(2);
+  document.getElementById('volField').value       = vol.toFixed(2);
 }
-
 function applyPreset(el, a, b) {
   document.querySelectorAll('.preset').forEach(p => p.classList.remove('selected'));
   el.classList.add('selected');
