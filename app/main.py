@@ -432,6 +432,63 @@ def health():
     return {"status": "ok", "version": __version__, "time": datetime.now(timezone.utc).isoformat()}
 
 
+# ---------- preview quality (non-destructive, drives the inline upload panel) ----------
+
+@app.post("/api/preview-check")
+async def preview_check(
+    order_lines_file: Annotated[UploadFile, File()],
+    sku_master_file: Annotated[UploadFile, File()],
+    stock_on_hand_file: Annotated[UploadFile | None, File()] = None,
+):
+    """Non-destructive data-quality preview.
+
+    Runs the same quality gates that /classify runs, without saving anything.
+    Powers the inline validation panel on the New classification page so the
+    user sees whether their files pass before they click Run.
+    """
+    result: dict = {"files": {}, "checks": [], "blocking": False, "error": None}
+
+    # File-level signals first - useful even if row-level checks fail later.
+    for key, f in [("order_lines", order_lines_file),
+                   ("sku_master",  sku_master_file),
+                   ("stock_on_hand", stock_on_hand_file)]:
+        if f is None or not f.filename:
+            result["files"][key] = None
+            continue
+        raw = await f.read()
+        result["files"][key] = {"name": f.filename, "size_bytes": len(raw)}
+        # Keep bytes around for the row-level pass
+        f.file.seek(0)
+        f._cached = raw  # type: ignore[attr-defined]
+
+    try:
+        ol = load_order_lines(order_lines_file._cached, order_lines_file.filename)  # type: ignore[attr-defined]
+        sm = load_sku_master(sku_master_file._cached, sku_master_file.filename)     # type: ignore[attr-defined]
+        soh = _empty_df()
+        if stock_on_hand_file is not None and stock_on_hand_file.filename:
+            soh = load_stock_on_hand(stock_on_hand_file._cached, stock_on_hand_file.filename)  # type: ignore[attr-defined]
+    except ValueError as e:
+        result["error"] = f"Could not load files: {e}"
+        return JSONResponse(result, status_code=200)
+    except Exception as e:
+        result["error"] = f"Unexpected error reading files: {type(e).__name__}: {e}"
+        return JSONResponse(result, status_code=200)
+
+    # Row count signals back into the file blocks so the UI can show rows read.
+    result["files"]["order_lines"] = dict(result["files"]["order_lines"] or {}, rows=int(len(ol)))
+    result["files"]["sku_master"]  = dict(result["files"]["sku_master"]  or {}, rows=int(len(sm)))
+    if result["files"].get("stock_on_hand"):
+        result["files"]["stock_on_hand"] = dict(result["files"]["stock_on_hand"], rows=int(len(soh)))
+
+    checks = run_quality_checks(ol, sm, soh)
+    result["checks"] = [
+        {"name": c.name, "severity": c.severity, "passed": c.passed, "detail": c.detail}
+        for c in checks
+    ]
+    result["blocking"] = is_blocking(checks)
+    return result
+
+
 def _empty_df():
     import pandas as pd
     return pd.DataFrame(columns=["sku_code", "qty_on_hand"])

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-mode="simple">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>{% block title %}{% block page_title %}{% endblock %} · Addverb ABC Classify{% endblock %}</title>
+<title>{% block title %}{% block page_title %}{% endblock %} · Addverb{% endblock %}</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,12 +12,16 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
 <script>
-  /* Theme + sidebar-collapse state restored before first paint to avoid flash. */
+  /* Theme + mode + sidebar-collapse state restored before first paint to avoid flash. */
   (function () {
     try {
       const theme = localStorage.getItem('abc-theme');
       if (theme === 'light' || theme === 'dark') {
         document.documentElement.setAttribute('data-theme', theme);
+      }
+      const mode = localStorage.getItem('abc-mode');
+      if (mode === 'simple' || mode === 'analytics') {
+        document.documentElement.setAttribute('data-mode', mode);
       }
     } catch (e) {}
   })();
@@ -32,54 +36,34 @@
        ===================================================== -->
   <aside class="sidebar">
 
-    <div class="brand">
-      {# Sidebar monogram tile. The official Addverb wordmark is a licensed
-         asset: drop <img src="/static/brand.svg" alt="Addverb"> in place of
-         the mark + text once /static/brand.svg lands. Never re-type or
-         re-draw the wordmark. #}
-      <div class="brand-mark" aria-label="Addverb">A</div>
-      <div class="brand-text">
-        <span class="brand-name">ADDVERB<span class="dot">.</span></span>
-        <span class="brand-sub">ABC Classify</span>
-      </div>
-    </div>
+    <a href="/" class="brand" aria-label="Addverb home">
+      <span class="brand-img" role="img" aria-label="Addverb"></span>
+    </a>
 
-    <div class="nav-group">Analysis</div>
-
-    {# New classification - plus inside square bracket for "start a new scoring" #}
     <a href="/" class="nav-item {% if request.url.path == '/' %}active{% endif %}" data-label="New classification">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
       <span class="nav-label">New classification</span>
     </a>
 
-    {# Order profile - package / box #}
-    <a href="/order-profile" class="nav-item {% if request.url.path == '/order-profile' %}active{% endif %}" data-label="Order profile">
+    {# Analytics-only: Order profile, Changes #}
+    <a href="/order-profile" class="nav-item analytics-only {% if request.url.path == '/order-profile' %}active{% endif %}" data-label="Order profile">
       <svg viewBox="0 0 24 24"><path d="M21 8.5L12 3 3 8.5V16l9 5 9-5V8.5z"/><path d="M3 8.5L12 14l9-5.5"/><path d="M12 14v7"/><path d="M7.5 5.75L16.5 11.25"/></svg>
       <span class="nav-label">Order profile</span>
     </a>
 
-    {# All runs - stacked rows #}
-    <a href="/runs" class="nav-item {% if request.url.path == '/runs' %}active{% endif %}" data-label="All runs">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/><circle cx="6.5" cy="6" r="0.9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12" r="0.9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="18" r="0.9" fill="currentColor" stroke="none"/></svg>
-      <span class="nav-label">All runs</span>
-    </a>
-
-    {# Changes - refresh / rotation arrows #}
-    <a href="/dashboard" class="nav-item {% if request.url.path.startswith('/dashboard') %}active{% endif %}" data-label="Changes">
+    <a href="/dashboard" class="nav-item analytics-only {% if request.url.path.startswith('/dashboard') %}active{% endif %}" data-label="Compare runs">
       <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 4v5h-5"/><path d="M3 12a9 9 0 003 6.7"/><path d="M3 20v-5h5"/></svg>
-      <span class="nav-label">Changes</span>
+      <span class="nav-label">Compare runs</span>
     </a>
 
-    <div class="nav-group">Reference</div>
+    <div class="nav-group">Help</div>
 
-    {# Methodology - open book #}
-    <a href="/docs/logic" class="nav-item {% if request.url.path == '/docs/logic' %}active{% endif %}" data-label="Methodology">
+    <a href="/docs/logic" class="nav-item {% if request.url.path == '/docs/logic' %}active{% endif %}" data-label="How it works">
       <svg viewBox="0 0 24 24"><path d="M2 4a2 2 0 012-2h6a2 2 0 012 2v16a2 2 0 00-2-2H2V4z"/><path d="M22 4a2 2 0 00-2-2h-6a2 2 0 00-2 2v16a2 2 0 012-2h6V4z"/></svg>
-      <span class="nav-label">Methodology</span>
+      <span class="nav-label">How it works</span>
     </a>
 
-    {# API reference - angle brackets #}
-    <a href="/docs" class="nav-item" data-label="API reference">
+    <a href="/docs" class="nav-item analytics-only" data-label="API reference">
       <svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5"/><path d="M15 7l5 5-5 5"/><path d="M14 4l-4 16"/></svg>
       <span class="nav-label">API reference</span>
     </a>
@@ -102,15 +86,36 @@
   <main class="main">
 
     <div class="topbar">
-      <div class="breadcrumb">
-        <a href="/">Addverb</a>
-        <span class="sep">/</span>
-        <span>ABC Classify</span>
-        <span class="sep">/</span>
-        <span class="current">{% block crumb %}{{ self.page_title() }}{% endblock %}</span>
-      </div>
+      <div class="topbar-title">{% block topbar_title %}{{ self.page_title() }}{% endblock %}</div>
+
       <div class="topbar-actions">
         {% block topbar_actions %}{% endblock %}
+
+        <div class="topbar-divider" aria-hidden="true"></div>
+
+        <!-- Past runs dropdown -->
+        <div class="dropdown" id="pastRunsDd">
+          <button class="btn sm dropdown-btn" onclick="togglePastRuns()" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            Past runs
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="dropdown-menu" id="pastRunsMenu" role="menu">
+            <div class="dropdown-head">
+              <span>Recent runs</span>
+              <a href="/runs" class="dropdown-all">See all →</a>
+            </div>
+            <div class="dropdown-body" id="pastRunsBody">
+              <div class="dropdown-empty">Loading…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode toggle -->
+        <div class="mode-toggle" role="group" aria-label="View mode">
+          <button type="button" class="mode-opt" data-mode-opt="simple" onclick="setMode('simple')">Simple</button>
+          <button type="button" class="mode-opt" data-mode-opt="analytics" onclick="setMode('analytics')">Analytics</button>
+        </div>
       </div>
     </div>
 
@@ -123,6 +128,7 @@
 </div>
 
 <script>
+  /* Theme */
   function toggleTheme() {
     const r = document.documentElement;
     const cur = r.getAttribute('data-theme') || 'dark';
@@ -131,6 +137,7 @@
     try { localStorage.setItem('abc-theme', next); } catch (e) {}
   }
 
+  /* Sidebar collapse */
   function toggleCollapse() {
     const app = document.getElementById('app');
     const now = app.getAttribute('data-collapsed') === 'true';
@@ -139,12 +146,79 @@
     try { localStorage.setItem('abc-sidebar-collapsed', next ? '1' : '0'); } catch (e) {}
   }
 
-  (function hydrateCollapsed() {
+  /* View mode (Simple | Analytics) */
+  function setMode(mode) {
+    if (mode !== 'simple' && mode !== 'analytics') return;
+    document.documentElement.setAttribute('data-mode', mode);
+    try { localStorage.setItem('abc-mode', mode); } catch (e) {}
+    document.querySelectorAll('.mode-opt').forEach(el => {
+      el.classList.toggle('active', el.dataset.modeOpt === mode);
+    });
+    document.dispatchEvent(new CustomEvent('abc-mode-change', { detail: { mode } }));
+  }
+
+  /* Past runs dropdown */
+  let _pastRunsLoaded = false;
+  function togglePastRuns() {
+    const dd = document.getElementById('pastRunsDd');
+    const btn = dd.querySelector('.dropdown-btn');
+    const open = dd.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && !_pastRunsLoaded) loadPastRuns();
+  }
+
+  async function loadPastRuns() {
+    const body = document.getElementById('pastRunsBody');
+    try {
+      const r = await fetch('/api/runs?limit=10');
+      const runs = await r.json();
+      if (!runs || runs.length === 0) {
+        body.innerHTML = '<div class="dropdown-empty">No runs yet. Upload files to get started.</div>';
+      } else {
+        body.innerHTML = runs.map(r => `
+          <a href="/runs/${r.run_id}" class="dropdown-row">
+            <div class="dr-main">
+              <div class="dr-title">${escapeHTML(r.client_name || 'Untitled')}</div>
+              <div class="dr-meta">${escapeHTML(r.warehouse_code || '—')} · ${escapeHTML(r.basis || '')}</div>
+            </div>
+            <div class="dr-side">
+              <span class="status-pill ${escapeHTML(r.status)}">${escapeHTML(r.status)}</span>
+              <div class="dr-date">${escapeHTML((r.created_at || '').slice(0, 10))}</div>
+            </div>
+          </a>
+        `).join('');
+      }
+      _pastRunsLoaded = true;
+    } catch (e) {
+      body.innerHTML = '<div class="dropdown-empty">Could not load runs.</div>';
+    }
+  }
+
+  function escapeHTML(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+  }
+
+  document.addEventListener('click', (e) => {
+    const dd = document.getElementById('pastRunsDd');
+    if (dd && dd.classList.contains('open') && !dd.contains(e.target)) {
+      dd.classList.remove('open');
+      dd.querySelector('.dropdown-btn').setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  /* Hydrate on load */
+  (function hydrate() {
     try {
       if (localStorage.getItem('abc-sidebar-collapsed') === '1') {
         document.getElementById('app').setAttribute('data-collapsed', 'true');
       }
     } catch (e) {}
+    const mode = document.documentElement.getAttribute('data-mode') || 'simple';
+    document.querySelectorAll('.mode-opt').forEach(el => {
+      el.classList.toggle('active', el.dataset.modeOpt === mode);
+    });
   })();
 </script>
 {% block scripts %}{% endblock %}
