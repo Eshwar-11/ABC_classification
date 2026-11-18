@@ -36,11 +36,11 @@
         <label class="field">Warehouse code</label>
         <input type="text" name="warehouse_code" placeholder="e.g. SAS_IND" required>
       </div>
-      <div class="analytics-only">
+      <div>
         <label class="field">Operator</label>
         <input type="text" name="operator" placeholder="your name or team">
       </div>
-      <div class="analytics-only">
+      <div>
         <label class="field">Run label (optional)</label>
         <input type="text" name="run_label" placeholder="e.g. monthly refresh, pilot v1">
       </div>
@@ -88,7 +88,7 @@
     </div>
 
     <!-- Forecast upload only when basis != historical -->
-    <div class="grid-2 analytics-only" id="forecast-upload-row" style="margin-top:14px; display:none">
+    <div class="grid-2" id="forecast-upload-row" style="margin-top:14px; display:none">
       <div>
         <div class="field">forecast file <span class="req-star">*</span> <span class="chip brand">Forecast / Combined basis</span></div>
         <div class="filedrop" data-fd="fc">
@@ -114,12 +114,12 @@
   </div>
 </div>
 
-<!-- STEP 3 - Basis, analytics-only -->
-<div class="panel analytics-only">
+<!-- STEP 3 - Basis -->
+<div class="panel">
   <div class="panel-head">
     <div>
       <div class="panel-title"><span class="step-num">3</span> Basis</div>
-      <div class="panel-sub">What the run scores on. Simple mode uses Historical.</div>
+      <div class="panel-sub">What the run scores on. Historical is the default and only needs order_lines.</div>
     </div>
   </div>
   <div class="panel-body">
@@ -164,12 +164,12 @@
   </div>
 </div>
 
-<!-- STEP 4..7, analytics-only -->
-<details class="panel analytics-only">
+<!-- STEP 4..7 - Advanced parameters, collapsed by default to keep the page scannable -->
+<details class="panel">
   <summary class="panel-head" style="cursor:pointer">
     <div>
       <div class="panel-title"><span class="step-num">4</span> Advanced parameters</div>
-      <div class="panel-sub">Ranking weights, cut-offs, add-ons, thresholds. Defaults match most monthly runs.</div>
+      <div class="panel-sub">Ranking weights, cut-offs, add-ons, thresholds. Click to expand. Defaults match most monthly runs.</div>
     </div>
   </summary>
   <div class="panel-body">

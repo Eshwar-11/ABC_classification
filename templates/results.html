@@ -85,18 +85,6 @@
   </div>
 </div>
 
-<!-- Simple mode: reveal strip; Analytics mode: hidden -->
-<div class="simple-only reveal-strip">
-  <div class="rs-label">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
-    Detailed analytics are hidden in Simple mode
-  </div>
-  <button type="button" class="btn sm" onclick="toggleDetails(this)">Show details</button>
-</div>
-
-<!-- Everything below is analytics detail. Simple mode hides it unless the user clicks Show details. -->
-<div class="details-block" id="detailsBlock">
-
 <!-- Pareto -->
 {% if meta.pareto_scan %}
 <div class="panel">
@@ -469,33 +457,7 @@
 </div>
 {% endif %}
 
-</div> <!-- /#detailsBlock -->
-
 <style>
-/* Simple-mode scoping, local to results */
-[data-mode="analytics"] .simple-only { display: none !important; }
-[data-mode="simple"] .details-block { display: none; }
-[data-mode="simple"] .details-block.reveal { display: block; }
-
-.reveal-strip {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--surface-sunken);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--r-md);
-  margin: var(--sp-5) 0;
-}
-.rs-label {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  color: var(--ink-secondary);
-  font-size: var(--fs-13);
-}
-
 /* Run hero, scoped to results page */
 .run-hero {
   background:
@@ -556,14 +518,5 @@
   margin-right: 4px;
 }
 </style>
-
-<script>
-function toggleDetails(btn) {
-  const b = document.getElementById('detailsBlock');
-  if (!b) return;
-  const on = b.classList.toggle('reveal');
-  btn.textContent = on ? 'Hide details' : 'Show details';
-}
-</script>
 
 {% endblock %}
